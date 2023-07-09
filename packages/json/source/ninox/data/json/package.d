@@ -23,7 +23,7 @@
  * Authors:   $(HTTP codeark.it/Mai-Lapyst, Mai-Lapyst)
  */
 
-module serialize_d.json;
+module ninox.data.json;
 
-public import serialize_d.json.attributes;
-public import serialize_d.json.serializer;
+public import ninox.data.json.attributes;
+public import ninox.data.json.serializer;

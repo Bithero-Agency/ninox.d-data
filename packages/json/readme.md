@@ -1,4 +1,4 @@
-# serialize-d:json
+# ninox-d_data:json
 
 JSON serialization support.
 

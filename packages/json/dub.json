@@ -3,11 +3,11 @@
 		"Mai-Lapyst"
 	],
 	"copyright": "Copyright © 2023, Mai-Lapyst",
-	"description": "JSON support for serialize-d",
+	"description": "JSON support for ninox-d_data",
 	"license": "AGPL-3.0-or-later",
 	"name": "json",
 	"dependencies": {
-		"serialize-d": {
+		"ninox-d_data": {
 			"path": "../.."
 		}
 	}

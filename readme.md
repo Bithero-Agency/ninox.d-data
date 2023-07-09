@@ -1,6 +1,6 @@
-# serialize-d
+# ninox.d-data
 
-serialize-d is a data serialization provider.
+ninox.d-data is a data serialization provider.
 
 ## License
 
@@ -15,4 +15,4 @@ The core itself contains:
 ## Subpackages
 
 Each serialization format is provided via a subpackage:
-- `serialize-d:json`: provides serialization support from/to JSON
+- `ninox-d_data:json`: provides serialization support from/to JSON

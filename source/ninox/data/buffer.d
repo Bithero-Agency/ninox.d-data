@@ -23,7 +23,7 @@
  * Authors:   $(HTTP codeark.it/Mai-Lapyst, Mai-Lapyst)
  */
 
-module serialize_d.buffer;
+module ninox.data.buffer;
 
 import ministd.callable;
 

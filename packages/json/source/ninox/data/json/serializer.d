@@ -23,10 +23,10 @@
  * Authors:   $(HTTP codeark.it/Mai-Lapyst, Mai-Lapyst)
  */
 
-module serialize_d.json.serializer;
+module ninox.data.json.serializer;
 
-import serialize_d.buffer;
-import serialize_d.json.attributes;
+import ninox.data.buffer;
+import ninox.data.json.attributes;
 
 import ministd.callable;
 

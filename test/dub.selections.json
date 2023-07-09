@@ -2,6 +2,6 @@
 	"fileVersion": 1,
 	"versions": {
 		"ministd": "0.2.1",
-		"serialize-d": {"path":".."}
+		"ninox-d_data": {"path":".."}
 	}
 }

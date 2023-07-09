@@ -23,9 +23,9 @@
  * Authors:   $(HTTP codeark.it/Mai-Lapyst, Mai-Lapyst)
  */
 
-module serialize_d;
+module ninox.data;
 
-public import serialize_d.buffer;
+public import ninox.data.buffer;
 
 import std.traits : isSomeString;
 

@@ -8,7 +8,7 @@
 	},
 	"description": "A serialization framework for D",
 	"license": "AGPL-3.0-or-later",
-	"name": "serialize-d",
+	"name": "ninox-d_data",
 	"subPackages": [
 		"./packages/json"
 	]

@@ -23,7 +23,7 @@
  * Authors:   $(HTTP codeark.it/Mai-Lapyst, Mai-Lapyst)
  */
 
-module serialize_d.json.attributes;
+module ninox.data.json.attributes;
 
 // --------------------------------------------------------------------------------
 //  Serialization
@@ -104,7 +104,7 @@ struct JsonTypeInfo {
 
 template mkJsonSubType(alias T, string name) {
     import std.traits : moduleName, fullyQualifiedName;
-    import serialize_d.json : JsonSubTypes;
+    import ninox.data.json : JsonSubTypes;
     import std.string : replace;
     enum JsonSubTypes.Type mkJsonSubType = {
         mod: moduleName!T,

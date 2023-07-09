@@ -3,8 +3,8 @@ import std.stdio;
 import std.typecons : Nullable, nullable, Tuple;
 import std.variant : Variant;
 
-import serialize_d;
-import serialize_d.json;
+import ninox.data;
+import ninox.data.json;
 
 enum State { Invalid, Open, HalfOpen, Closed }
 

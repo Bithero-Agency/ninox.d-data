@@ -7,10 +7,10 @@
 	"license": "AGPL-3.0-or-later",
 	"name": "test",
 	"dependencies": {
-		"serialize-d": {
+		"ninox-d_data": {
 			"path": ".."
 		},
-		"serialize-d:json": {
+		"ninox-d_data:json": {
 			"path": "../packages/json"
 		}
 	}

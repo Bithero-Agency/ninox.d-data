@@ -10,7 +10,7 @@ json.a
 json.lib
 json-test-*
 libjson.a
-libserialize-d_json.a
+libninox-d_data_json.a
 *.exe
 *.pdb
 *.o
