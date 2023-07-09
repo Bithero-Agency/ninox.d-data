@@ -25,7 +25,7 @@
 
 module ninox.data.buffer;
 
-import ministd.callable;
+import ninox.std.callable;
 
 /// Base escape function that does no escaping
 void noEscape(alias Sink)(const(ubyte)[] chars) {

@@ -28,7 +28,7 @@ module ninox.data.json.serializer;
 import ninox.data.buffer;
 import ninox.data.json.attributes;
 
-import ministd.callable;
+import ninox.std.callable;
 
 /// Specialization of the base SerializerBuffer to handle JSON
 /// 

@@ -1,7 +1,7 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"ministd": "0.2.2",
-		"ninox-d_data": {"path":"../.."}
+		"ninox-d_data": {"path":"../.."},
+		"ninox-d_std": "1.0.0"
 	}
 }
