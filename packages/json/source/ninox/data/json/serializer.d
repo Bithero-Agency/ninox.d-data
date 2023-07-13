@@ -1246,7 +1246,7 @@ public:
                     static if (__code == "") {
                         default: {
                             auto rawVal = parse.consumeRawJson();
-                            debug (serialize_d) {
+                            debug (ninox_data) {
                                 import std.stdio;
                                 writeln("[JsonMapper.deserialize!" ~ fullyQualifiedName!T ~ "] found unknown key '" ~ key ~ "' with value " ~ rawVal);
                             }
@@ -1340,7 +1340,7 @@ public:
                         mixin(GenCasesTuple!());
                         default: {
                             auto rawVal = parse.consumeRawJson();
-                            debug (serialize_d) {
+                            debug (ninox_data) {
                                 import std.stdio;
                                 writeln("[JsonMapper.deserialize!" ~ fullyQualifiedName!T ~ "] found unknown key '" ~ key ~ "' with value " ~ rawVal);
                             }

@@ -7,7 +7,7 @@ JSON serialization support.
 The serializer is build in a way, that you easily can start using it without any special attributes (UDA's):
 
 ```d
-import serialize_d.json;
+import ninox.data.json;
 import std.stdio;
 
 class MyObj {
@@ -194,4 +194,4 @@ There is a whole range of attributes one can use to modify the behaviour of the 
 ## Roadmap
 
 - support pretty printing
-- support more attributes (see `source/serialize_d/json/attributes.d`)
+- support more attributes (see `source/ninox/data/json/attributes.d`)
