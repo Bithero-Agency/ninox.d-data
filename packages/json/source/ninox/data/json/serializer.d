@@ -1457,7 +1457,12 @@ public:
         else static if (isArray!T) {
             static if (is(T : E[], E)) {
                 parse.consumeChar('[');
-                E[] r;
+                static if (isStaticArray!T) {
+                    E[T.sizeof / E.sizeof] r;
+                    size_t i = 0;
+                } else {
+                    E[] r;
+                }
                 char c;
                 while (true) {
                     c = parse.currentChar();
@@ -1465,7 +1470,12 @@ public:
                     else if (c == ',') { parse.nextChar(); continue; }
                     else if (c.isWhitespace) { parse.nextChar(); continue; }
                     else {
-                        r ~= this.deserialize!(E)(parse);
+                        static if (isStaticArray!T) {
+                            r[i] = this.deserialize!(E)(parse);
+                            i++;
+                        } else {
+                            r ~= this.deserialize!(E)(parse);
+                        }
                     }
                 }
                 return r;
