@@ -1,5 +1,7 @@
 # ninox.d-data
 
+[![DUB Version](https://img.shields.io/dub/v/ninox-d_data)](https://code.dlang.org/packages/ninox-d_data)
+
 ninox.d-data is a data serialization provider.
 
 ## License
