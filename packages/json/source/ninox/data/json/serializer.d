@@ -566,6 +566,38 @@ private template KeyFromJsonProperty(string name, alias E)
     }
 }
 
+private template SerializeValueCode(alias T, alias Elem, string getElemCode, string getRawValCode, string name)
+{
+    import std.traits;
+    static if (hasUDA!(Elem, JsonSerialize)) {
+        import std.conv : to;
+        enum SerializeValueCode =
+            "{ " ~
+                "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
+                "alias udas = getUDAs!(" ~ getElemCode ~ ", JsonSerialize);" ~
+                "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonSerialize attributes\");" ~
+                "callCustomSerializer!(udas)(buff, " ~ getRawValCode ~ ");" ~
+            " }";
+    } else static if (hasUDA!(Elem, JsonRawValue)) {
+        alias ty = typeof(Elem);
+        static if (is(ty == function)) {
+            static assert(
+                isSomeString!(ReturnType!ty),
+                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: getter needs to return a string-like type"
+            );
+        } else {
+            static assert(
+                isSomeString!ty,
+                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: is not of string-like type"
+            );
+        }
+
+        enum SerializeValueCode = "buff.putRaw(" ~ getRawValCode ~ ");";
+    } else {
+        enum SerializeValueCode = "this.serialize(buff, " ~ getRawValCode ~ ");";
+    }
+}
+
 /// The JSON (de-)serializer
 class JsonMapper {
 public:
@@ -616,21 +648,10 @@ public:
                 alias name = field_names[i];
                 enum Key = KeyFromJsonProperty!(name, T.tupleof[i]);
 
-                alias ty = field_types[i];
-                static if (hasUDA!(T.tupleof[i], JsonSerialize)) {
-                    import std.conv : to;
-                    enum Val =
-                        "{ " ~
-                            "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
-                            "alias udas = getUDAs!(T.tupleof[" ~ to!string(i) ~ "], JsonSerialize);" ~
-                            "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonSerialize attributes\");" ~
-                            "callCustomSerializer!(udas)(buff, value." ~ name ~ ");" ~
-                        " }";
-                } else static if (isSomeString!(ty) && hasUDA!(T.tupleof[i], JsonRawValue)) {
-                    enum Val = "buff.putRaw(value." ~ name ~ ");";
-                } else {
-                    enum Val = "this.serialize(buff, value." ~ name ~ ");";
-                }
+                import std.conv : to;
+                enum Val = SerializeValueCode!(
+                    T, T.tupleof[i], "T.tupleof[" ~ to!string(i) ~ "]", "value." ~ name, name
+                );
 
                 enum FieldImpl = Sep ~ "buff.putKey(\"" ~ Key ~ "\");" ~ Val ~ FieldImpl!(i+1);
             }
@@ -724,25 +745,11 @@ public:
                                     "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Need name for @JsonGetter"
                                 );
 
-                                static if (hasUDA!(member, JsonRawValue)) {
-                                    static assert (
-                                        isSomeString!(ReturnType!member),
-                                        "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Getter needs to return a string-like type when annotated with @JsonRawValue"
-                                    );
+                                enum Val = SerializeValueCode!(
+                                    T, member, "__traits(getMember, T, \"" ~ name ~ "\")", "value." ~ name ~ "()", name
+                                );
 
-                                    enum GetterImpl =
-                                        Sep
-                                        ~ "buff.putKey(\"" ~ uda.name ~ "\");"
-                                        ~ "buff.putRaw(value." ~ name ~ "());"
-                                        ~ GetterImpl!(i+1, j+1);
-                                }
-                                else {
-                                    enum GetterImpl =
-                                        Sep
-                                        ~ "buff.putKey(\"" ~ uda.name ~ "\");"
-                                        ~ "this.serialize(buff, value." ~ name ~ "());"
-                                        ~ GetterImpl!(i+1, j+1);
-                                }
+                                enum GetterImpl = Sep ~ "buff.putKey(\"" ~ uda.name ~ "\");" ~ Val ~ GetterImpl!(i+1, j+1);
                             }
                         } else static if (isAnyGetter) {
                             alias RetT = ReturnType!member;
