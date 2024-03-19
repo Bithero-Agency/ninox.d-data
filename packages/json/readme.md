@@ -91,7 +91,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
     Note: the serializer **does not** ensure that the raw JSON is valid in any way.
 
 - `@JsonSerialize`: specify a class (or function) that should be used to serialize the type / value:
-    ```
+    ```d
     class MyClassSerializer {
         this(int i) {}
         void serializeJson(T)(JsonBuffer buff, auto ref T value) {}
@@ -110,7 +110,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
     Note: everything after the first template argument is optional and will be used to initialize classes/structs or given after the buffer and the value for functions.
 
 - `@JsonDeserialize`: specify a class (or function) that should be used to deserialize the type / value:
-    ```
+    ```d
     class MyClassDeserializer {
         this(int i) {}
         V deserializeJson(V)(JsonParser parse) {
