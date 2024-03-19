@@ -44,7 +44,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         }
     }
     ```
-    Note: the returntype must **always** be a associative array with a string as key type.
+    > Note: the returntype must **always** be a associative array with a string as key type.
 
 - `@JsonAnySetter`: allows to deserialize arbitary keys; in practice this means all keys left after fields / getters have gotten their:
     ```d
@@ -53,7 +53,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         void setAnything(string key, JsonParser parse) {}
     }
     ```
-    Note: the setter always gets the key as a string and the `JsonParser` instance to parse the value it wants to get.
+    > Note: the setter always gets the key as a string and the `JsonParser` instance to parse the value it wants to get.
 
 - `@JsonGetter(name: "")`: allows to use a getter function for a property:
     ```d
@@ -64,7 +64,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         }
     }
     ```
-    Note: the method **must** have a return type other than void, and the method cannot have any parameters.
+    > Note: the method **must** have a return type other than void, and the method cannot have any parameters.
 
 - `@JsonSetter(name: "")`: allows to use a setter function for a property:
     ```d
@@ -73,7 +73,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         void getName(string name) {}
     }
     ```
-    Note: the method **must** have only one parameter. Returntype is ignored.
+    > Note: the method **must** have only one parameter. Returntype is ignored.
 
 - `@JsonRawValue`: allows fields / getters to return raw JSON:
     ```d
@@ -88,7 +88,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         }
     }
     ```
-    Note: the serializer **does not** ensure that the raw JSON is valid in any way.
+    > Note: the serializer **does not** ensure that the raw JSON is valid in any way.
 
 - `@JsonSerialize`: specify a class (or function) that should be used to serialize the type / value:
     ```d
@@ -107,7 +107,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         string s;
     }
     ```
-    Note: everything after the first template argument is optional and will be used to initialize classes/structs or given after the buffer and the value for functions.
+    > Note: everything after the first template argument is optional and will be used to initialize classes/structs or given after the buffer and the value for functions.
 
 - `@JsonDeserialize`: specify a class (or function) that should be used to deserialize the type / value:
     ```d
@@ -130,7 +130,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
         string s;
     }
     ```
-    Note: everything after the first template argument is optional and will be used to initialize classes/structs or given after the buffer and the value for functions.
+    > Note: everything after the first template argument is optional and will be used to initialize classes/structs or given after the buffer and the value for functions.
 
 - `@JsonAlias`: specifies additional aliases which are also used when deserialized:
     ```d
@@ -140,7 +140,7 @@ There is a whole range of attributes one can use to modify the behaviour of the 
     }
     ```
     This has the effect that the json `{"name":"John Doe"}` and `{"full_name":"John Doe"}` are deserialized into the a object where `obj.name == "John Doe"`.
-    Note: in a JSON object that has *both* keys, the key that comes last will override any values set before, so if you have `{"name":"John Doe","full_name":"Juliet"}`, then the resulting value will be `Juliet`.
+    > Note: in a JSON object that has *both* keys, the key that comes last will override any values set before, so if you have `{"name":"John Doe","full_name":"Juliet"}`, then the resulting value will be `Juliet`.
 
 - `@JsonIgnore`: this allows you to simply ignore fields in a structure (will not be serialized and/or deserialized).
 
@@ -185,11 +185,11 @@ There is a whole range of attributes one can use to modify the behaviour of the 
     ```
     The bearer subclass in variable `a` gets serialized to: `{"type":"bearer","token":"zzzz"}`.
 
-    Note: there are also `JsonTypeInfo.As.WRAPPER_OBJECT` and `JsonTypeInfo.As.WRAPPER_ARRAY`. When used the above example would result in `{"name":"bearer","value":{"token":"zzzz"}}` and `["bearer",{"token":"zzzz"}]` respectively.
+    > Note: there are also `JsonTypeInfo.As.WRAPPER_OBJECT` and `JsonTypeInfo.As.WRAPPER_ARRAY`. When used the above example would result in `{"name":"bearer","value":{"token":"zzzz"}}` and `["bearer",{"token":"zzzz"}]` respectively.
 
-    Note: currently the order of properties / elements is important: the data that denotes the type needs to always come first.
+    > Note: currently the order of properties / elements is important: the data that denotes the type needs to always come first.
 
-    Note: currently all classes that should be deserializeable via this feature needs an default constructor; i.e. `this() {}`.
+    > Note: currently all classes that should be deserializeable via this feature needs an default constructor; i.e. `this() {}`.
 
 ## Roadmap
 
