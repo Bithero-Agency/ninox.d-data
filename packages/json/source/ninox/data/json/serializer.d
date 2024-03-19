@@ -598,6 +598,62 @@ private template SerializeValueCode(alias T, alias Elem, string getElemCode, str
     }
 }
 
+private template UnserializeValueCode(
+    alias T, alias Elem, string getElemCode,
+    string setRawValue, string name
+)
+{
+    import std.traits, std.string : indexOf;
+    enum idx = setRawValue.indexOf('$');
+    enum setRawValuePrefix = setRawValue[0..idx];
+    enum setRawValueSuffix = setRawValue[idx+1..$];
+    static if (hasUDA!(Elem, JsonDeserialize)) {
+        import std.conv : to;
+        enum UnserializeValueCode =
+            "{ " ~
+                "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
+                "alias udas = getUDAs!(" ~ getElemCode ~ ", JsonDeserialize);" ~
+                "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonDeserialize attributes\");" ~
+                "alias ty = typeof(" ~ getElemCode ~ ");" ~
+                "static if (is(ty == function)) {" ~
+                    setRawValuePrefix ~ "callCustomDeserializer!(udas, Parameters!ty)(parse)" ~ setRawValueSuffix ~
+                "} else {" ~
+                    setRawValuePrefix ~ "callCustomDeserializer!(udas, ty)(parse)" ~ setRawValueSuffix ~
+                "}" ~
+            " }";
+    } else static if (hasUDA!(Elem, JsonRawValue)) {
+        alias ty = typeof(Elem);
+        static if (is(ty == function)) {
+            alias params = Parameters!ty;
+            static assert(
+                params.length == 1 && isSomeString!(params[0]),
+                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: setter needs to accept a string-like type"
+            );
+        } else {
+            static assert(
+                isSomeString!ty,
+                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: is not of string-like type"
+            );
+        }
+
+        enum UnserializeValueCode = setRawValuePrefix ~ "parse.consumeRawJson()" ~ setRawValueSuffix;
+    } else {
+        alias ty = typeof(Elem);
+        static if (is(typeof(Elem) == function)) {
+            ty = Parameters!ty;
+        }
+
+        static if (isBuiltinType!ty && !is(ty == enum)) {
+            enum UnserializeValueCode =
+                setRawValuePrefix ~ "this.deserialize!(" ~ fullyQualifiedName!ty ~ ")(parse)" ~ setRawValueSuffix;
+        } else {
+            enum UnserializeValueCode =
+                "import " ~ moduleName!ty ~ "; " ~
+                setRawValuePrefix ~ "this.deserialize!(" ~ fullyQualifiedName!ty ~ ")(parse)" ~ setRawValueSuffix;
+        }
+    }
+}
+
 /// The JSON (de-)serializer
 class JsonMapper {
 public:
@@ -1079,30 +1135,11 @@ public:
                         alias name = field_names[i];
                         enum Key = KeyFromJsonProperty!(name, T.tupleof[i]);
 
-                        alias ty = field_types[i];
-                        static if (hasUDA!(T.tupleof[i], JsonDeserialize)) {
-                            import std.conv : to;
-                            enum Val =
-                                "{ " ~
-                                    "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
-                                    "alias udas = getUDAs!(T.tupleof[" ~ to!string(i) ~ "], JsonDeserialize);" ~
-                                    "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonDeserialize attributes\");" ~
-                                    "value." ~ name ~ " = callCustomDeserializer!(udas, typeof(T.tupleof[" ~ to!string(i) ~ "]))(parse);" ~
-                                " }";
-                        } else static if (isSomeString!(ty) && hasUDA!(T.tupleof[i], JsonRawValue)) {
-                            enum Val = "value." ~ name ~ " = parse.consumeRawJson();";
-                        } else {
-                            mixin("alias member = T." ~ name ~ ";");
-                            alias memberTy = typeof(member);
-                            static if (isBuiltinType!memberTy && !is(memberTy == enum)) {
-                                enum Val =
-                                    "value." ~ name ~ " = this.deserialize!(" ~ fullyQualifiedName!memberTy ~ ")(parse);";
-                            } else {
-                                enum Val =
-                                    "import " ~ moduleName!memberTy ~ "; " ~
-                                    "value." ~ name ~ " = this.deserialize!(" ~ fullyQualifiedName!memberTy ~ ")(parse);";
-                            }
-                        }
+                        import std.conv : to;
+                        enum Val = UnserializeValueCode!(
+                            T, T.tupleof[i], "T.tupleof[" ~ to!string(i) ~ "]",
+                            "value." ~ name ~ "=$;", name
+                        );
 
                         enum Aliases = GenAliasCases!(T.tupleof[i]);
 
@@ -1153,26 +1190,15 @@ public:
                                             "Error in setter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Need name for @JsonSetter"
                                         );
 
-                                        static if (hasUDA!(member, JsonRawValue)) {
-                                            static assert(
-                                                is(ParameterTypeTuple!member == AliasSeq!( string )),
-                                                "Error in setter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Need parameter of type string if annotated with @JsonRawValue"
-                                            );
-
-                                            enum Val = "parse.consumeRawJson()";
-                                        }
-                                        else {
-                                            enum Val = "this.deserialize!(ParameterTypeTuple!member)(parse)";
-                                        }
+                                        enum Val = UnserializeValueCode!(
+                                            T, member, "__traits(getMember, T, \"" ~ name ~ "\")",
+                                            "value." ~ name ~ "($);", name
+                                        );
 
                                         enum Aliases = GenAliasCases!(member);
 
                                         enum GenCasesStructMethods =
-                                            "case \"" ~ uda.name ~ "\": " ~ Aliases ~ " {"
-                                                ~ "alias member = T." ~ name ~ ";"
-                                                ~ "value." ~ name ~ "(" ~ Val ~ ");"
-                                                ~ "break;"
-                                            ~ "}"
+                                            "case \"" ~ uda.name ~ "\": " ~ Aliases ~ " {" ~ Val ~ "break; }"
                                             ~ GenCasesStructMethods!(i+1);
                                     }
                                 } else {
