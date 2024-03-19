@@ -544,6 +544,28 @@ private bool isWhitespace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
+private template KeyFromJsonProperty(string name, alias E)
+{
+    import std.traits;
+    static if (hasUDA!(E, JsonProperty)) {
+        alias udas = getUDAs!(E, JsonProperty);
+        static assert(udas.length == 1, "Field `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
+
+        alias uda = udas[0];
+        static if (is(uda == JsonProperty)) {
+            enum KeyFromJsonProperty = name;
+        } else {
+            static if (uda.name == "") {
+                enum KeyFromJsonProperty = name;
+            } else {
+                enum KeyFromJsonProperty = uda.name;
+            }
+        }
+    } else {
+        enum KeyFromJsonProperty = name;
+    }
+}
+
 /// The JSON (de-)serializer
 class JsonMapper {
 public:
@@ -592,24 +614,7 @@ public:
                 }
 
                 alias name = field_names[i];
-
-                static if (hasUDA!(T.tupleof[i], JsonProperty)) {
-                    alias udas = getUDAs!(T.tupleof[i], JsonProperty);
-                    static assert(udas.length == 1, "Field `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
-
-                    alias uda = udas[0];
-                    static if (is(uda == JsonProperty)) {
-                        enum Key = name;
-                    } else {
-                        static if (uda.name == "") {
-                            enum Key = name;
-                        } else {
-                            enum Key = uda.name;
-                        }
-                    }
-                } else {
-                    enum Key = name;
-                }
+                enum Key = KeyFromJsonProperty!(name, T.tupleof[i]);
 
                 alias ty = field_types[i];
                 static if (hasUDA!(T.tupleof[i], JsonSerialize)) {
@@ -1065,23 +1070,7 @@ public:
                     } else {
 
                         alias name = field_names[i];
-                        static if (hasUDA!(T.tupleof[i], JsonProperty)) {
-                            alias udas = getUDAs!(T.tupleof[i], JsonProperty);
-                            static assert(udas.length == 1, "Field `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
-
-                            alias uda = udas[0];
-                            static if (is(uda == JsonProperty)) {
-                                enum Key = name;
-                            } else {
-                                static if (uda.name == "") {
-                                    enum Key = name;
-                                } else {
-                                    enum Key = uda.name;
-                                }
-                            }
-                        } else {
-                            enum Key = name;
-                        }
+                        enum Key = KeyFromJsonProperty!(name, T.tupleof[i]);
 
                         alias ty = field_types[i];
                         static if (hasUDA!(T.tupleof[i], JsonDeserialize)) {
