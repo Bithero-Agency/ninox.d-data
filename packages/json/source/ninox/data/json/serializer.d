@@ -718,9 +718,29 @@ private template UnserializeValueCode(
     }
 }
 
+import std.variant;
+interface JsonRuntimeSerializer {
+    void serializeJson(JsonBuffer buff, string typeName, Variant obj);
+    Variant deserializeJson(JsonParser parse, string typeName);
+}
+
 /// The JSON (de-)serializer
 class JsonMapper {
+private:
+    JsonRuntimeSerializer[string] rtSerializers;
+
 public:
+
+    void withSerializer(T)(JsonRuntimeSerializer serializer)
+        if (is(T == struct) || is(T == class))
+    {
+        import std.traits;
+        rtSerializers[fullyQualifiedName!T] = serializer;
+    }
+
+    bool hasSerializer(T)() {
+        return (fullyQualifiedName!T in rtSerializers) !is null;
+    }
 
     /// Serializes any value into a string containg JSON
     /// 
@@ -995,6 +1015,12 @@ public:
             buff.put('}');
         }
         else static if (is(T == class) || is(T == struct)) {
+            enum fullName = fullyQualifiedName!T;
+            if (auto dumper = fullName in rtSerializers) {
+                dumper.serializeJson(buff, fullName, Variant(value));
+                return;
+            }
+
             static if (is(T == class)) {
                 if (value is null) {
                     buff.putRaw("null");
@@ -1495,6 +1521,11 @@ public:
             return value;
         }
         else static if (is(T == class) || is(T == struct)) {
+            enum fullName = fullyQualifiedName!T;
+            if (auto dumper = fullName in rtSerializers) {
+                return dumper.deserializeJson(parse, fullName).get!T;
+            }
+
             static if (is(T == class)) {
                 if (parse.match("null")) {
                     parse.skip(4);
