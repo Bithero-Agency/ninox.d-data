@@ -544,6 +544,17 @@ private bool isWhitespace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
+private template GetTypeForDeserialization(alias Elem)
+{
+    import std.traits;
+    static if (isCallable!Elem) {
+        alias GetTypeForDeserialization = Parameters!Elem;
+    }
+    else {
+        alias GetTypeForDeserialization = typeof(Elem);
+    }
+}
+
 private template KeyFromJsonProperty(alias T, string name, alias E)
 {
     import std.traits;
@@ -574,7 +585,8 @@ private template SerializeValueCode(alias T, alias Elem, string getElemCode, str
         enum SerializeValueCode =
             "{ " ~
                 "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
-                "alias udas = getUDAs!(" ~ getElemCode ~ ", JsonSerialize);" ~
+                getElemCode ~
+                "alias udas = getUDAs!(Elem, JsonSerialize);" ~
                 "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonSerialize attributes\");" ~
                 "callCustomSerializer!(udas)(buff, " ~ getRawValCode ~ ");" ~
             " }";
@@ -612,26 +624,22 @@ private template UnserializeValueCode(
         enum UnserializeValueCode =
             "{ " ~
                 "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
-                "alias udas = getUDAs!(" ~ getElemCode ~ ", JsonDeserialize);" ~
+                getElemCode ~
+                "alias udas = getUDAs!(Elem, JsonDeserialize);" ~
                 "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonDeserialize attributes\");" ~
-                "alias ty = typeof(" ~ getElemCode ~ ");" ~
-                "static if (is(ty == function)) {" ~
-                    setRawValuePrefix ~ "callCustomDeserializer!(udas, Parameters!ty)(parse)" ~ setRawValueSuffix ~
-                "} else {" ~
-                    setRawValuePrefix ~ "callCustomDeserializer!(udas, ty)(parse)" ~ setRawValueSuffix ~
-                "}" ~
+                "alias ty = GetTypeForDeserialization!Elem;" ~
+                setRawValuePrefix ~ "callCustomDeserializer!(udas, ty)(parse)" ~ setRawValueSuffix ~
             " }";
     } else static if (hasUDA!(Elem, JsonRawValue)) {
-        alias ty = typeof(Elem);
-        static if (is(ty == function)) {
-            alias params = Parameters!ty;
+        static if (isCallable!Elem) {
+            alias params = Parameters!Elem;
             static assert(
                 params.length == 1 && isSomeString!(params[0]),
                 "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: setter needs to accept a string-like type"
             );
         } else {
             static assert(
-                isSomeString!ty,
+                isSomeString!Elem,
                 "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: is not of string-like type"
             );
         }
@@ -704,9 +712,8 @@ public:
                 alias name = field_names[i];
                 enum Key = KeyFromJsonProperty!(T, name, T.tupleof[i]);
 
-                import std.conv : to;
                 enum Val = SerializeValueCode!(
-                    T, T.tupleof[i], "T.tupleof[" ~ to!string(i) ~ "]", "value." ~ name, name
+                    T, __traits(getMember, T, name), "alias Elem = __traits(getMember, T, \"" ~ name ~ "\");", "value." ~ name, name
                 );
 
                 enum FieldImpl = Sep ~ "buff.putKey(\"" ~ Key ~ "\");" ~ Val ~ FieldImpl!(i+1);
@@ -802,7 +809,7 @@ public:
                                 );
 
                                 enum Val = SerializeValueCode!(
-                                    T, member, "__traits(getMember, T, \"" ~ name ~ "\")", "value." ~ name ~ "()", name
+                                    T, member, "alias Elem = __traits(getMember, T, \"" ~ name ~ "\");", "value." ~ name ~ "()", name
                                 );
 
                                 enum GetterImpl = Sep ~ "buff.putKey(\"" ~ uda.name ~ "\");" ~ Val ~ GetterImpl!(i+1, j+1);
@@ -1137,7 +1144,7 @@ public:
 
                         import std.conv : to;
                         enum Val = UnserializeValueCode!(
-                            T, T.tupleof[i], "T.tupleof[" ~ to!string(i) ~ "]",
+                            T, __traits(getMember, T, name), "alias Elem = __traits(getMember, T, \"" ~ name ~ "\");",
                             "value." ~ name ~ "=$;", name
                         );
 
@@ -1191,7 +1198,7 @@ public:
                                         );
 
                                         enum Val = UnserializeValueCode!(
-                                            T, member, "__traits(getMember, T, \"" ~ name ~ "\")",
+                                            T, member, "alias Elem = __traits(getMember, T, \"" ~ name ~ "\");",
                                             "value." ~ name ~ "($);", name
                                         );
 
