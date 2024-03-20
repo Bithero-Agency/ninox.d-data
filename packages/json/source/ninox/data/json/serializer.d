@@ -544,7 +544,7 @@ private bool isWhitespace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-private template KeyFromJsonProperty(string name, alias E)
+private template KeyFromJsonProperty(alias T, string name, alias E)
 {
     import std.traits;
     static if (hasUDA!(E, JsonProperty)) {
@@ -702,7 +702,7 @@ public:
                 }
 
                 alias name = field_names[i];
-                enum Key = KeyFromJsonProperty!(name, T.tupleof[i]);
+                enum Key = KeyFromJsonProperty!(T, name, T.tupleof[i]);
 
                 import std.conv : to;
                 enum Val = SerializeValueCode!(
@@ -1133,7 +1133,7 @@ public:
                     } else {
 
                         alias name = field_names[i];
-                        enum Key = KeyFromJsonProperty!(name, T.tupleof[i]);
+                        enum Key = KeyFromJsonProperty!(T, name, T.tupleof[i]);
 
                         import std.conv : to;
                         enum Val = UnserializeValueCode!(
