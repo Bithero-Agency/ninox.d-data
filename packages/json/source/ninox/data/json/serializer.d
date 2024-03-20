@@ -786,6 +786,8 @@ public:
                 enum CountFields = CountFields!(i+1);
             } else static if (hasUDA!(field_types[i], JsonIgnoreType)) {
                 enum CountFields = CountFields!(i+1);
+            } else static if (!__traits(compiles, mixin("T." ~ field_names[i]))) {
+                enum CountFields = CountFields!(i+1);
             } else {
                 enum CountFields = 1 + CountFields!(i+1);
             }
