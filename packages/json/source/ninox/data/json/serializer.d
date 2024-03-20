@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Mai-Lapyst
+ * Copyright (C) 2024 Mai-Lapyst
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -19,7 +19,7 @@
  * Module for the core JSON (de-)serializer
  * 
  * License:   $(HTTP https://www.gnu.org/licenses/agpl-3.0.html, AGPL 3.0).
- * Copyright: Copyright (C) 2023 Mai-Lapyst
+ * Copyright: Copyright (C) 2024 Mai-Lapyst
  * Authors:   $(HTTP codeark.it/Mai-Lapyst, Mai-Lapyst)
  */
 
