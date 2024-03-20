@@ -758,6 +758,8 @@ public:
                 enum FieldImpl = FieldImpl!(i+1);
             } else static if (hasUDA!(field_types[i], JsonIgnoreType)) {
                 enum FieldImpl = FieldImpl!(i+1);
+            } else static if (!__traits(compiles, mixin("T." ~ field_names[i]))) {
+                enum FieldImpl = FieldImpl!(i+1);
             } else {
                 static if (i > 0) {
                     enum Sep = "buff.put(',');";
@@ -1219,6 +1221,8 @@ public:
                     } else static if (hasUDA!(T.tupleof[i], JsonIgnore)) {
                         enum GenCasesStructFields = GenCasesStructFields!(i+1);
                     } else static if (hasUDA!(field_types[i], JsonIgnoreType)) {
+                        enum GenCasesStructFields = GenCasesStructFields!(i+1);
+                    } else static if (!__traits(compiles, mixin("T." ~ field_names[i]))) {
                         enum GenCasesStructFields = GenCasesStructFields!(i+1);
                     } else {
 
