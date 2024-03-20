@@ -544,6 +544,32 @@ private bool isWhitespace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
+private template SetterFromOverloads(overloads...)
+{
+    import std.meta, std.traits;
+    alias setter = AliasSeq!();
+    static foreach (overload; overloads) {
+        static if (is(ReturnType!overload == void) && Parameters!overload.length == 1) {
+            setter = AliasSeq!(setter, overload);
+        }
+    }
+    static assert(setter.length == 1, "Could not find setter from overload set");
+    alias SetterFromOverloads = setter[0];
+}
+
+private template GetterFromOverloads(overloads...)
+{
+    import std.meta, std.traits;
+    alias getter = AliasSeq!();
+    static foreach (overload; overloads) {
+        static if (!is(ReturnType!overload == void) && Parameters!overload.length == 0) {
+            getter = AliasSeq!(getter, overload);
+        }
+    }
+    static assert(getter.length == 1, "Could not find getter from overload set");
+    alias GetterFromOverloads = getter[0];
+}
+
 private template GetTypeForDeserialization(alias Elem)
 {
     import std.traits;
@@ -574,6 +600,36 @@ private template KeyFromJsonProperty(alias T, string name, alias E)
         }
     } else {
         enum KeyFromJsonProperty = name;
+    }
+}
+
+private template KeyFromJsonPropertyOverloads(alias T, string name, overloads...)
+{
+    import std.meta, std.traits;
+    template Inner(size_t i = 0) {
+        static if (i >= overloads.length) {
+            alias Inner = AliasSeq!();
+        } else {
+            alias overload = overloads[i];
+            alias udas = getUDAs!(overload, JsonProperty);
+            static if (udas.length > 0) {
+                static assert(udas.length == 1, "Property `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
+                static if (!is(udas[0] == JsonProperty) && udas[0].name != "") {
+                    alias Inner = AliasSeq!(udas[0].name, Inner!(i+1));
+                } else {
+                    alias Inner = Inner!(i+1);
+                }
+            } else {
+                alias Inner = Inner!(i+1);
+            }
+        }
+    }
+    alias Keys = Inner!(0);
+    static assert(Keys.length <= 1, "Property overload set `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
+    static if (Keys.length < 1) {
+        enum KeyFromJsonPropertyOverloads = name;
+    } else {
+        enum KeyFromJsonPropertyOverloads = Keys[0];
     }
 }
 
@@ -750,6 +806,9 @@ public:
                             enum CountGetter = CountGetter!(i+1);
                         }
                     }
+                    else static if (isCallable!member && hasFunctionAttributes!(member, "@property")) {
+                        enum CountGetter = 1 + CountGetter!(i+1);
+                    }
                     else {
                         enum CountGetter = CountGetter!(i+1);
                     }
@@ -844,6 +903,30 @@ public:
                             }
                         } else {
                             enum GetterImpl = GetterImpl!(i+1, j);
+                        }
+                    }
+                    else static if (isCallable!member && hasFunctionAttributes!(member, "@property")) {
+                        static if (j > 0) {
+                            enum Sep = "buff.put(',');";
+                        } else {
+                            enum Sep = "";
+                        }
+                        alias overloads = __traits(getOverloads, T, name);
+                        alias getter = AliasSeq!();
+                        static foreach (overload; overloads) {
+                            static if (!is(ReturnType!overload == void) && Parameters!overload.length == 0) {
+                                getter = AliasSeq!(getter, overload);
+                            }
+                        }
+
+                        static if (getter.length < 1) {
+                            enum GetterImpl = GetterImpl!(i+1, j);
+                        } else {
+                            enum Key = KeyFromJsonPropertyOverloads!(T, name, overloads);
+                            enum Val = SerializeValueCode!(
+                                T, getter[0], "alias Elem = GetterFromOverloads!(__traits(getOverloads, T, \"" ~ name ~ "\"));", "value." ~ name, name
+                            );
+                            enum GetterImpl = Sep ~ "buff.putKey(\"" ~ Key ~ "\");" ~ Val ~ GetterImpl!(i+1, j+1);
                         }
                     }
                     else {
@@ -1210,6 +1293,31 @@ public:
                                     }
                                 } else {
                                     enum GenCasesStructMethods = GenCasesStructMethods!(i+1);
+                                }
+                            }
+                            else static if (isCallable!member && hasFunctionAttributes!(member, "@property")) {
+                                alias overloads = __traits(getOverloads, T, name);
+                                alias setter = AliasSeq!();
+                                static foreach (overload; overloads) {
+                                    static if (Parameters!overload.length > 0) {
+                                        setter = AliasSeq!(setter, overload);
+                                    }
+                                }
+
+                                static if (setter.length < 1) {
+                                    enum GenCasesStructMethods = GenCasesStructMethods!(i+1);
+                                }
+                                else {
+                                    static assert (setter.length == 1, "Cannot have more than one setter...");
+                                    enum Key = KeyFromJsonPropertyOverloads!(T, name, overloads);
+                                    enum Val = UnserializeValueCode!(
+                                        T, setter[0], "alias Elem = SetterFromOverloads!(__traits(getOverloads, T, \"" ~ name ~ "\"));",
+                                        "value." ~ name ~ "=$;", name
+                                    );
+                                    enum Aliases = GenAliasCases!(setter[0]);
+                                    enum GenCasesStructMethods =
+                                        "case \"" ~ Key ~ "\": " ~ Aliases ~ " { " ~ Val ~ " break; }\n"
+                                        ~ GenCasesStructMethods!(i+1);
                                 }
                             }
                             else {
