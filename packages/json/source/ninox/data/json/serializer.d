@@ -149,6 +149,17 @@ private V callCustomDeserializer(alias uda, V)(JsonParser parse) {
     }
 }
 
+/// Exception when any dumping/serialization goes wrong
+class JsonDumpException : Exception {
+    @nogc @safe pure nothrow this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable nextInChain = null) {
+        super(msg, file, line, nextInChain);
+    }
+
+    @nogc @safe pure nothrow this(string msg, Throwable nextInChain, string file = __FILE__, size_t line = __LINE__) {
+        super(msg, file, line, nextInChain);
+    }
+}
+
 /// Exception when any parsing/deserialization goes wrong
 class JsonParseException : Exception {
     @nogc @safe pure nothrow this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable nextInChain = null) {
@@ -724,6 +735,30 @@ interface JsonRuntimeSerializer {
     Variant deserializeJson(JsonParser parse, string typeName);
 }
 
+alias JsonRuntimeSerializeCallable = Callable!(void, JsonBuffer, string, Variant);
+alias JsonRuntimeDeserializeCallable = Callable!(Variant, JsonParser, string);
+
+class FunctionalJsonRuntimeSerializer : JsonRuntimeSerializer {
+    this(
+        JsonRuntimeSerializeCallable serialize,
+        JsonRuntimeDeserializeCallable deserialize
+    ) {
+        this._serialize = serialize;
+        this._deserialize = deserialize;
+    }
+
+    void serializeJson(JsonBuffer buff, string typeName, Variant obj) {
+        this._serialize(buff, typeName, obj);
+    }
+    Variant deserializeJson(JsonParser parse, string typeName) {
+        return this._deserialize(parse, typeName);
+    }
+
+private:
+    JsonRuntimeSerializeCallable _serialize;
+    JsonRuntimeDeserializeCallable _deserialize;
+}
+
 /// The JSON (de-)serializer
 class JsonMapper {
 private:
@@ -736,6 +771,35 @@ public:
     {
         import std.traits;
         rtSerializers[fullyQualifiedName!T] = serializer;
+    }
+
+    static immutable TypeSerialize = [
+        "fn": "void function(JsonBuffer, string, Variant)",
+        "dg": "void delegate(JsonBuffer, string, Variant)",
+        "cb": "JsonRuntimeSerializeCallable",
+    ];
+    static immutable TypeDeserialize = [
+        "fn": "Variant function(JsonParser, string)",
+        "dg": "Variant delegate(JsonParser, string)",
+        "cb": "JsonRuntimeDeserializeCallable",
+    ];
+    static foreach (tyS; ["fn", "dg", "cb"]) {
+        static foreach (tyD; ["fn", "dg", "cb"]) {
+            void withSerializer(T)(
+                mixin(TypeSerialize[tyS]) serialize,
+                mixin(TypeDeserialize[tyD]) deserialize
+            ) {
+                static if (tyS == "cb") { enum ExprSerialize = "serialize"; }
+                else { enum ExprSerialize = "JsonRuntimeSerializeCallable(serialize)"; }
+
+                static if (tyD == "cb") { enum ExprDeserialize = "deserialize"; }
+                else { enum ExprDeserialize = "JsonRuntimeDeserializeCallable(deserialize)"; }
+
+                this.withSerializer!(T)(
+                    new FunctionalJsonRuntimeSerializer(mixin(ExprSerialize), mixin(ExprDeserialize))
+                );
+            }
+        }
     }
 
     bool hasSerializer(T)() {
