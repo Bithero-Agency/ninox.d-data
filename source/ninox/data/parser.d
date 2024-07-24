@@ -45,25 +45,26 @@ public:
     }
 
     /// Fills up the internal buffer
-    void fill() {
+    void fill(bool handleEOF = true) {
         this.len = this.source(this.data, BufferSize);
-        if (this.len < 1) {
+        if (handleEOF && this.len < 1) {
             throw this.buildParseException("End of file reached");
         }
         this.pos = 0;
     }
 
     /// Checks if filling is needed and fills the buffer (only when the buffer is completly empty!)
-    void fillIfNeeded() {
+    pragma(inline) void fillIfNeeded(bool handleEOF = true) {
         if (this.pos >= this.len) {
-            this.fill();
+            this.fill(handleEOF);
         }
     }
 
-    /// Checks if the internal buffer is at the end
+    /// Checks if the parser is at the end
     /// 
-    /// Returns: true if the internal buffer is at the end; false otherwise
+    /// Returns: true if the parser is at the end; false otherwise
     bool isAtEnd() {
+        this.fillIfNeeded(false);
         return this.pos >= this.len;
     }
 
