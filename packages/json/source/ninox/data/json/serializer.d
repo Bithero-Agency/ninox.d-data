@@ -30,6 +30,7 @@ import ninox.data.custom_serializer;
 import ninox.data.json.attributes;
 
 import ninox.std.callable;
+import ninox.std.variant;
 
 /// Specialization of the base SerializerBuffer to handle JSON
 /// 
@@ -392,82 +393,11 @@ alias KeyFromJsonPropertyOverloads = KeyFromCustomPropertyOverloads!(JsonPropert
 alias SerializeValueCode = GenericSerializeValueCode!("Json", JsonSerialize, JsonRawValue);
 alias UnserializeValueCode = GenericUnserializeValueCode!("Json", JsonDeserialize, JsonRawValue, "consumeRawJson");
 
-import std.variant;
-interface JsonRuntimeSerializer {
-    void serializeJson(JsonBuffer buff, string typeName, Variant obj);
-    Variant deserializeJson(JsonParser parse, string typeName);
-}
-
-alias JsonRuntimeSerializeCallable = Callable!(void, JsonBuffer, string, Variant);
-alias JsonRuntimeDeserializeCallable = Callable!(Variant, JsonParser, string);
-
-class FunctionalJsonRuntimeSerializer : JsonRuntimeSerializer {
-    this(
-        JsonRuntimeSerializeCallable serialize,
-        JsonRuntimeDeserializeCallable deserialize
-    ) {
-        this._serialize = serialize;
-        this._deserialize = deserialize;
-    }
-
-    void serializeJson(JsonBuffer buff, string typeName, Variant obj) {
-        this._serialize(buff, typeName, obj);
-    }
-    Variant deserializeJson(JsonParser parse, string typeName) {
-        return this._deserialize(parse, typeName);
-    }
-
-private:
-    JsonRuntimeSerializeCallable _serialize;
-    JsonRuntimeDeserializeCallable _deserialize;
-}
+alias JsonRuntimeSerializer = RuntimeSerializer!(JsonBuffer, JsonParser, "Json");
 
 /// The JSON (de-)serializer
-class JsonMapper {
-private:
-    JsonRuntimeSerializer[string] rtSerializers;
-
+class JsonMapper : BaseMapper!(JsonBuffer, JsonParser, "Json") {
 public:
-
-    void withSerializer(T)(JsonRuntimeSerializer serializer)
-        if (is(T == struct) || is(T == class))
-    {
-        import std.traits;
-        rtSerializers[fullyQualifiedName!T] = serializer;
-    }
-
-    static immutable TypeSerialize = [
-        "fn": "void function(JsonBuffer, string, Variant)",
-        "dg": "void delegate(JsonBuffer, string, Variant)",
-        "cb": "JsonRuntimeSerializeCallable",
-    ];
-    static immutable TypeDeserialize = [
-        "fn": "Variant function(JsonParser, string)",
-        "dg": "Variant delegate(JsonParser, string)",
-        "cb": "JsonRuntimeDeserializeCallable",
-    ];
-    static foreach (tyS; ["fn", "dg", "cb"]) {
-        static foreach (tyD; ["fn", "dg", "cb"]) {
-            void withSerializer(T)(
-                mixin(TypeSerialize[tyS]) serialize,
-                mixin(TypeDeserialize[tyD]) deserialize
-            ) {
-                static if (tyS == "cb") { enum ExprSerialize = "serialize"; }
-                else { enum ExprSerialize = "JsonRuntimeSerializeCallable(serialize)"; }
-
-                static if (tyD == "cb") { enum ExprDeserialize = "deserialize"; }
-                else { enum ExprDeserialize = "JsonRuntimeDeserializeCallable(deserialize)"; }
-
-                this.withSerializer!(T)(
-                    new FunctionalJsonRuntimeSerializer(mixin(ExprSerialize), mixin(ExprDeserialize))
-                );
-            }
-        }
-    }
-
-    bool hasSerializer(T)() {
-        return (fullyQualifiedName!T in rtSerializers) !is null;
-    }
 
     /// Serializes any value into a string containg JSON
     /// 
@@ -702,7 +632,6 @@ public:
         import std.meta : AliasSeq, Filter;
         import std.conv : to;
         import std.typecons : Nullable, Tuple;
-        import std.variant : VariantN;
 
         static if (hasUDA!(T, JsonIgnoreType)) {
             throw new RuntimeException("Cannot serialize a value of type `" ~ fullyQualifiedName!T ~ "`: is annotated with @JsonIgnoreType");
@@ -744,7 +673,8 @@ public:
         else static if (is(T == class) || is(T == struct)) {
             enum fullName = fullyQualifiedName!T;
             if (auto dumper = fullName in rtSerializers) {
-                dumper.serializeJson(buff, fullName, Variant(value));
+                auto v = Variant(value);
+                dumper.serializeJson(buff, fullName, v);
                 return;
             }
 
@@ -1250,7 +1180,9 @@ public:
         else static if (is(T == class) || is(T == struct)) {
             enum fullName = fullyQualifiedName!T;
             if (auto dumper = fullName in rtSerializers) {
-                return dumper.deserializeJson(parse, fullName).get!T;
+                auto v = Variant();
+                dumper.deserializeJson(parse, fullName, v);
+                return v.get!T;
             }
 
             static if (is(T == class)) {

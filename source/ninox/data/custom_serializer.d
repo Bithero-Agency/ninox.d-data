@@ -25,6 +25,10 @@
 
 module ninox.data.custom_serializer;
 
+import ninox.std.callable;
+import ninox.std.traits : RefT;
+import ninox.std.variant;
+
 package (ninox.data):
 
 template mkCallCustomSerializer(Buffer, string Format) {
@@ -80,4 +84,88 @@ template mkCallCustomDeserializer(Parser, string Format) {
             return DeserializerTy!(V)(parse, Args);
         }
     }
+}
+
+interface RuntimeSerializer(Buffer, Parser, string Format) {
+    mixin("void serialize" ~ Format ~ "(Buffer buff, string typeName, ref Variant obj);");
+    mixin("void deserialize" ~ Format ~ "(Parser parse, string typeName, ref Variant obj);");
+}
+
+class FunctionalRuntimeSerializer(Buffer, Parser, string Format)
+    : RuntimeSerializer!(Buffer, Parser, Format)
+{
+    alias SerializeTy = Callable!(void, Buffer, string, RefT!Variant);
+    alias DeserializeTy = Callable!(void, Parser, string, RefT!Variant);
+
+    this(
+        SerializeTy serialize,
+        DeserializeTy deserialize,
+    ) {
+        this._serialize = serialize;
+        this._deserialize = deserialize;
+    }
+
+    mixin(`void serialize` ~ Format ~ `(Buffer buff, string typeName, ref Variant obj) {
+        this._serialize(buff, typeName, obj);
+    }`);
+    mixin(`void deserialize` ~ Format ~ `(Parser parse, string typeName, ref Variant obj) {
+        this._deserialize(parse, typeName, obj);
+    }`);
+
+private:
+    SerializeTy _serialize;
+    DeserializeTy _deserialize;
+}
+
+class BaseMapper(Buffer, Parser, string Format) {
+public:
+    alias RtSerializer = RuntimeSerializer!(Buffer, Parser, Format);
+    alias FunctionalRtSerializer = FunctionalRuntimeSerializer!(Buffer, Parser, Format);
+
+protected:
+    RtSerializer[string] rtSerializers;
+
+public:
+
+    pragma(inline)
+    void withSerializer(T)(RtSerializer serializer)
+        if (is(T == struct) || is(T == class))
+    {
+        import std.traits;
+        rtSerializers[fullyQualifiedName!T] = serializer;
+    }
+
+    static immutable TypeSerialize = [
+        "fn": "void function(Buffer, string, ref Variant)",
+        "dg": "void delegate(Buffer, string, ref Variant)",
+        "cb": "FunctionalRtSerializer.SerializeTy",
+    ];
+    static immutable TypeDeserialize = [
+        "fn": "void function(Parser, string, ref Variant)",
+        "dg": "void delegate(Parser, string, ref Variant)",
+        "cb": "FunctionalRtSerializer.DeserializeTy",
+    ];
+    static foreach (tyS; ["fn", "dg", "cb"]) {
+        static foreach (tyD; ["fn", "dg", "cb"]) {
+            void withSerializer(T)(
+                mixin(TypeSerialize[tyS]) serialize,
+                mixin(TypeDeserialize[tyD]) deserialize
+            ) {
+                static if (tyS == "cb") { enum ExprSerialize = "serialize"; }
+                else { enum ExprSerialize = "FunctionalRtSerializer.SerializeTy(serialize)"; }
+
+                static if (tyD == "cb") { enum ExprDeserialize = "deserialize"; }
+                else { enum ExprDeserialize = "FunctionalRtSerializer.DeserializeTy(deserialize)"; }
+
+                this.withSerializer!(T)(
+                    new FunctionalRtSerializer(mixin(ExprSerialize), mixin(ExprDeserialize))
+                );
+            }
+        }
+    }
+
+    bool hasSerializer(T)() {
+        return (fullyQualifiedName!T in rtSerializers) !is null;
+    }
+
 }
