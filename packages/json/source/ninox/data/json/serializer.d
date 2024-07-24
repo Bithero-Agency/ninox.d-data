@@ -497,7 +497,7 @@ private template UnserializeValueCode(
             );
         } else {
             static assert(
-                isSomeString!Elem,
+                isSomeString!(typeof(Elem)),
                 "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: is not of string-like type"
             );
         }
