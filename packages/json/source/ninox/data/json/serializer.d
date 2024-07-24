@@ -468,27 +468,8 @@ private template GetTypeForDeserialization(alias Elem)
     }
 }
 
-private template KeyFromJsonProperty(alias T, string name, alias E)
-{
-    import std.traits;
-    static if (hasUDA!(E, JsonProperty)) {
-        alias udas = getUDAs!(E, JsonProperty);
-        static assert(udas.length == 1, "Field `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
-
-        alias uda = udas[0];
-        static if (is(uda == JsonProperty)) {
-            enum KeyFromJsonProperty = name;
-        } else {
-            static if (uda.name == "") {
-                enum KeyFromJsonProperty = name;
-            } else {
-                enum KeyFromJsonProperty = uda.name;
-            }
-        }
-    } else {
-        enum KeyFromJsonProperty = name;
-    }
-}
+import ninox.data.traits;
+alias KeyFromJsonProperty = KeyFromCustomProperty!(JsonProperty);
 
 private template KeyFromJsonPropertyOverloads(alias T, string name, overloads...)
 {
