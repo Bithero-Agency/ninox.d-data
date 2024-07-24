@@ -51,3 +51,33 @@ template mkCallCustomSerializer(Buffer, string Format) {
         }
     }
 }
+
+template mkCallCustomDeserializer(Parser, string Format) {
+    V mkCallCustomDeserializer(alias uda, V)(Parser parse) {
+        import std.traits;
+
+        alias DeserializerTy = TemplateArgsOf!(uda)[0];
+        alias Args = TemplateArgsOf!(uda)[1 .. $];
+
+        static if (is(DeserializerTy == struct)) {
+            enum Deserializer = DeserializerTy(Args);
+            mixin("return Deserializer.deserialize" ~ Format ~ "!(V)(parse);");
+        }
+        else static if (is(DeserializerTy == class)) {
+            auto Deserializer = new DeserializerTy(Args);
+            mixin("return Deserializer.deserialize" ~ Format ~ "!(V)(parse);");
+        }
+        else static if (isCallable!DeserializerTy) {
+            alias RetT = ReturnType!DeserializerTy;
+            static assert(
+                is(RetT == V),
+                "Error: functional deserializer `" ~ fullyQualifiedName!DeserializerTy ~ "` has a returntype of `" ~ RetT.stringof ~ "` but needed `" ~ V.stringof ~ "`"
+            );
+            return DeserializerTy(parse, Args);
+        }
+        else {
+            // last resort: just guess its a generic function...
+            return DeserializerTy!(V)(parse, Args);
+        }
+    }
+}
