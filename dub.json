@@ -4,7 +4,7 @@
 	],
 	"copyright": "Copyright © 2023, Mai-Lapyst",
 	"dependencies": {
-		"ninox-d_std:callable": "~>1.4.0"
+		"ninox-d_std:callable": "~>1.7.5"
 	},
 	"description": "A serialization framework for D",
 	"license": "AGPL-3.0-or-later",
