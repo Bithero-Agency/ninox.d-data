@@ -171,135 +171,21 @@ class JsonParseException : Exception {
     }
 }
 
+import ninox.data.parser;
+
 /// A parser for JSON
-class JsonParser {
-private:
-    Callable!(size_t, char[], size_t) source;
-    size_t len, pos;
-    char[4069 * 4] data = void;
+class JsonParser : DeserializerParser {
+protected:
+    override Exception buildParseException(string msg, string file, size_t line) {
+        return new JsonParseException(msg, file, line);
+    }
 
 public:
     this(size_t function(char[], size_t) source) {
-        this.source = source;
+        super(source);
     }
     this(size_t delegate(char[], size_t) source) {
-        this.source = source;
-    }
-
-    /// Fills up the internal buffer
-    void fill() {
-        this.len = this.source(this.data, 4069 * 4);
-        if (this.len < 1) {
-            throw new JsonParseException("End of file reached");
-        }
-        this.pos = 0;
-    }
-    /// Checks if filling is needed and fills the buffer (only when the buffer is completly empty!)
-    void fillIfNeeded() {
-        if (this.pos >= this.len) {
-            this.fill();
-        }
-    }
-    /// Checks if the internal buffer is at the end
-    /// 
-    /// Returns: true if the internal buffer is at the end; false otherwise
-    bool isAtEnd() {
-        return this.pos >= this.len;
-    }
-
-    /// Skips a specified amount of chars; alters the position
-    /// 
-    /// Params:
-    ///   i = the amount of characters to skip
-    void skip(size_t i) {
-        this.pos += i;
-        this.fillIfNeeded();
-    }
-    /// Skips all whitespaces
-    void skipWhitespace() {
-        char c;
-        while (true) {
-            c = this.currentChar();
-            if (c.isWhitespace) {
-                this.pos++;
-            } else {
-                return;
-            }
-        }
-    }
-
-    /// Consumes a character; alters the position
-    /// 
-    /// Params:
-    ///   c = the caracter to consume
-    void consumeChar(char c) {
-        this.fillIfNeeded();
-        if (this.data[this.pos] == c) {
-            this.pos++;
-            return;
-        } else {
-            throw new JsonParseException("require '" ~ c ~ "'");
-        }
-    }
-    /// Consumes a fixed string; alters the position
-    /// 
-    /// Note: Fills the internal buffer if needed via `fillIfNeeded()`.
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
-    /// 
-    /// Params:
-    ///   s = the string to consume
-    void consume(string s) {
-        this.fillIfNeeded();
-        size_t bak_pos = this.pos;
-        foreach (c; s) {
-            if (this.data[this.pos] != c) {
-                this.pos = bak_pos;
-                throw new JsonParseException("require '" ~ s ~ "'");
-            }
-            this.pos++;
-        }
-    }
-
-    /// Matches a fixed string; position is NOT altered
-    /// 
-    /// Note: Fills the internal buffer if needed via `fillIfNeeded()`.
-    /// Note: Cannot match accross boundries of the internal buffer and new data of the source.
-    /// 
-    /// Params:
-    ///   s = the string to match
-    /// 
-    /// Retruns: true if the string was matched; false otherwise
-    bool match(string s) {
-        this.fillIfNeeded();
-        size_t bak_pos = this.pos;
-        foreach (c; s) {
-            if (this.data[this.pos] != c) {
-                this.pos = bak_pos;
-                return false;
-            }
-            this.pos++;
-        }
-        return true;
-    }
-
-    /// Gets the current char in the buffer; position is NOT altered
-    /// 
-    /// Note: Fills the internal buffer if needed via `fillIfNeeded()`.
-    /// 
-    /// Returns: the char at the current position in the internal buffer
-    char currentChar() {
-        this.fillIfNeeded();
-        return this.data[this.pos];
-    }
-
-    /// Gets the current char in the buffer and increases the position
-    /// 
-    /// Fills the internal buffer if needed via `fillIfNeeded()`.
-    /// 
-    /// Returns: the char at the current position in the internal buffer
-    char nextChar() {
-        this.fillIfNeeded();
-        return this.data[this.pos++];
+        super(source);
     }
 
     /// Consumes a whole JSON string
