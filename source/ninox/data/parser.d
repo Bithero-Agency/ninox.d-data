@@ -107,14 +107,13 @@ public:
     /// Consumes a fixed string; alters the position
     /// 
     /// Note: Fills the internal buffer if needed via `fillIfNeeded()`.
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
     /// 
     /// Params:
     ///   s = the string to consume
     void consume(string s) {
-        this.fillIfNeeded();
         size_t bak_pos = this.pos;
         foreach (c; s) {
+            this.fillIfNeeded();
             if (this.data[this.pos] != c) {
                 this.pos = bak_pos;
                 throw this.buildParseException("require '" ~ s ~ "'");
@@ -126,16 +125,15 @@ public:
     /// Matches a fixed string; position is NOT altered
     /// 
     /// Note: Fills the internal buffer if needed via `fillIfNeeded()`.
-    /// Note: Cannot match accross boundries of the internal buffer and new data of the source.
     /// 
     /// Params:
     ///   s = the string to match
     /// 
     /// Retruns: true if the string was matched; false otherwise
     bool match(string s) {
-        this.fillIfNeeded();
         size_t bak_pos = this.pos;
         foreach (c; s) {
+            this.fillIfNeeded();
             if (this.data[this.pos] != c) {
                 this.pos = bak_pos;
                 return false;
