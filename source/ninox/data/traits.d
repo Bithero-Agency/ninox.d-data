@@ -130,8 +130,8 @@ template GenericSerializeValueCode(string FormatName, alias SerializeTy, alias R
                 "{ " ~
                     "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
                     getElemCode ~
-                    "alias udas = getUDAs!(Elem, " ~ SerializeTy.stringof ~ ");" ~
-                    "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @" ~ SerializeTy.stringof ~ " attributes\");" ~
+                    "alias udas = getUDAs!(Elem, " ~ __traits(identifier, SerializeTy) ~ ");" ~
+                    "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @" ~ __traits(identifier, SerializeTy) ~ " attributes\");" ~
                     "callCustomSerializer!(udas)(buff, " ~ getRawValCode ~ ");" ~
                 " }";
         } else static if (hasUDA!(Elem, RawValueTy)) {
@@ -172,8 +172,8 @@ template GenericUnserializeValueCode(string FormatName, alias DeserializeTy, ali
                 "{ " ~
                     "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
                     getElemCode ~
-                    "alias udas = getUDAs!(Elem, " ~ DeserializeTy.stringof ~ ");" ~
-                    "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @" ~ DeserializeTy.stringof ~ " attributes\");" ~
+                    "alias udas = getUDAs!(Elem, " ~ __traits(identifier, DeserializeTy) ~ ");" ~
+                    "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @" ~ __traits(identifier, DeserializeTy) ~ " attributes\");" ~
                     "alias ty = GetTypeForDeserialization!Elem;" ~
                     setRawValuePrefix ~ "callCustomDeserializer!(udas, ty)(parse)" ~ setRawValueSuffix ~
                 " }";
