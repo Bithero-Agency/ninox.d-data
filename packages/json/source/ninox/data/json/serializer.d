@@ -436,58 +436,7 @@ alias KeyFromJsonProperty = KeyFromCustomProperty!(JsonProperty);
 alias KeyFromJsonPropertyOverloads = KeyFromCustomPropertyOverloads!(JsonProperty);
 
 alias SerializeValueCode = GenericSerializeValueCode!("Json", JsonSerialize, JsonRawValue);
-
-private template UnserializeValueCode(
-    alias T, alias Elem, string getElemCode,
-    string setRawValue, string name
-)
-{
-    import std.traits, std.string : indexOf;
-    enum idx = setRawValue.indexOf('$');
-    enum setRawValuePrefix = setRawValue[0..idx];
-    enum setRawValueSuffix = setRawValue[idx+1..$];
-    static if (hasUDA!(Elem, JsonDeserialize)) {
-        import std.conv : to;
-        enum UnserializeValueCode =
-            "{ " ~
-                "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
-                getElemCode ~
-                "alias udas = getUDAs!(Elem, JsonDeserialize);" ~
-                "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonDeserialize attributes\");" ~
-                "alias ty = GetTypeForDeserialization!Elem;" ~
-                setRawValuePrefix ~ "callCustomDeserializer!(udas, ty)(parse)" ~ setRawValueSuffix ~
-            " }";
-    } else static if (hasUDA!(Elem, JsonRawValue)) {
-        static if (isCallable!Elem) {
-            alias params = Parameters!Elem;
-            static assert(
-                params.length == 1 && isSomeString!(params[0]),
-                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: setter needs to accept a string-like type"
-            );
-        } else {
-            static assert(
-                isSomeString!(typeof(Elem)),
-                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: is not of string-like type"
-            );
-        }
-
-        enum UnserializeValueCode = setRawValuePrefix ~ "parse.consumeRawJson()" ~ setRawValueSuffix;
-    } else {
-        alias ty = typeof(Elem);
-        static if (is(typeof(Elem) == function)) {
-            ty = Parameters!ty;
-        }
-
-        static if (isBuiltinType!ty && !is(ty == enum)) {
-            enum UnserializeValueCode =
-                setRawValuePrefix ~ "this.deserialize!(" ~ fullyQualifiedName!ty ~ ")(parse)" ~ setRawValueSuffix;
-        } else {
-            enum UnserializeValueCode =
-                "import " ~ moduleName!ty ~ "; " ~
-                setRawValuePrefix ~ "this.deserialize!(" ~ fullyQualifiedName!ty ~ ")(parse)" ~ setRawValueSuffix;
-        }
-    }
-}
+alias UnserializeValueCode = GenericUnserializeValueCode!("Json", JsonDeserialize, JsonRawValue, "consumeRawJson");
 
 import std.variant;
 interface JsonRuntimeSerializer {

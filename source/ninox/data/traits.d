@@ -154,3 +154,58 @@ template GenericSerializeValueCode(string FormatName, alias SerializeTy, alias R
         }
     }
 }
+
+template GenericUnserializeValueCode(string FormatName, alias DeserializeTy, alias RawValueTy, string consumeMethod)
+{
+    template GenericUnserializeValueCode(
+        alias T, alias Elem, string getElemCode,
+        string setRawValue, string name
+    )
+    {
+        import std.traits, std.string : indexOf;
+        enum idx = setRawValue.indexOf('$');
+        enum setRawValuePrefix = setRawValue[0..idx];
+        enum setRawValueSuffix = setRawValue[idx+1..$];
+        static if (hasUDA!(Elem, DeserializeTy)) {
+            import std.conv : to;
+            enum GenericUnserializeValueCode =
+                "{ " ~
+                    "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
+                    getElemCode ~
+                    "alias udas = getUDAs!(Elem, " ~ DeserializeTy.stringof ~ ");" ~
+                    "static assert (udas.length == 1, \"Cannot deserialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @" ~ DeserializeTy.stringof ~ " attributes\");" ~
+                    "alias ty = GetTypeForDeserialization!Elem;" ~
+                    setRawValuePrefix ~ "callCustomDeserializer!(udas, ty)(parse)" ~ setRawValueSuffix ~
+                " }";
+        } else static if (hasUDA!(Elem, RawValueTy)) {
+            static if (isCallable!Elem) {
+                alias params = Parameters!Elem;
+                static assert(
+                    params.length == 1 && isSomeString!(params[0]),
+                    "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw " ~ FormatName ~ ": setter needs to accept a string-like type"
+                );
+            } else {
+                static assert(
+                    isSomeString!(typeof(Elem)),
+                    "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw " ~ FormatName ~ ": is not of string-like type"
+                );
+            }
+
+            enum GenericUnserializeValueCode = setRawValuePrefix ~ "parse." ~ consumeMethod ~ "()" ~ setRawValueSuffix;
+        } else {
+            alias ty = typeof(Elem);
+            static if (is(typeof(Elem) == function)) {
+                ty = Parameters!ty;
+            }
+
+            static if (isBuiltinType!ty && !is(ty == enum)) {
+                enum GenericUnserializeValueCode =
+                    setRawValuePrefix ~ "this.deserialize!(" ~ fullyQualifiedName!ty ~ ")(parse)" ~ setRawValueSuffix;
+            } else {
+                enum GenericUnserializeValueCode =
+                    "import " ~ moduleName!ty ~ "; " ~
+                    setRawValuePrefix ~ "this.deserialize!(" ~ fullyQualifiedName!ty ~ ")(parse)" ~ setRawValueSuffix;
+            }
+        }
+    }
+}
