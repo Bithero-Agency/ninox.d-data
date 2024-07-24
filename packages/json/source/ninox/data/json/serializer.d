@@ -435,38 +435,7 @@ import ninox.data.traits;
 alias KeyFromJsonProperty = KeyFromCustomProperty!(JsonProperty);
 alias KeyFromJsonPropertyOverloads = KeyFromCustomPropertyOverloads!(JsonProperty);
 
-private template SerializeValueCode(alias T, alias Elem, string getElemCode, string getRawValCode, string name)
-{
-    import std.traits;
-    static if (hasUDA!(Elem, JsonSerialize)) {
-        import std.conv : to;
-        enum SerializeValueCode =
-            "{ " ~
-                "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
-                getElemCode ~
-                "alias udas = getUDAs!(Elem, JsonSerialize);" ~
-                "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @JsonSerialize attributes\");" ~
-                "callCustomSerializer!(udas)(buff, " ~ getRawValCode ~ ");" ~
-            " }";
-    } else static if (hasUDA!(Elem, JsonRawValue)) {
-        alias ty = typeof(Elem);
-        static if (is(ty == function)) {
-            static assert(
-                isSomeString!(ReturnType!ty),
-                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: getter needs to return a string-like type"
-            );
-        } else {
-            static assert(
-                isSomeString!ty,
-                "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw Json: is not of string-like type"
-            );
-        }
-
-        enum SerializeValueCode = "buff.putRaw(" ~ getRawValCode ~ ");";
-    } else {
-        enum SerializeValueCode = "this.serialize(buff, " ~ getRawValCode ~ ");";
-    }
-}
+alias SerializeValueCode = GenericSerializeValueCode!("Json", JsonSerialize, JsonRawValue);
 
 private template UnserializeValueCode(
     alias T, alias Elem, string getElemCode,

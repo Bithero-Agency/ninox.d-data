@@ -118,3 +118,39 @@ template KeyFromCustomPropertyOverloads(CustomPropertyTy) {
         }
     }
 }
+
+template GenericSerializeValueCode(string FormatName, alias SerializeTy, alias RawValueTy)
+{
+    template GenericSerializeValueCode(alias T, alias Elem, string getElemCode, string getRawValCode, string name)
+    {
+        import std.traits;
+        static if (hasUDA!(Elem, SerializeTy)) {
+            import std.conv : to;
+            enum GenericSerializeValueCode =
+                "{ " ~
+                    "alias T = imported!\"" ~ moduleName!T ~ "\"." ~ T.stringof ~ ";" ~
+                    getElemCode ~
+                    "alias udas = getUDAs!(Elem, " ~ SerializeTy.stringof ~ ");" ~
+                    "static assert (udas.length == 1, \"Cannot serialize member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: got more than one @" ~ SerializeTy.stringof ~ " attributes\");" ~
+                    "callCustomSerializer!(udas)(buff, " ~ getRawValCode ~ ");" ~
+                " }";
+        } else static if (hasUDA!(Elem, RawValueTy)) {
+            alias ty = typeof(Elem);
+            static if (is(ty == function)) {
+                static assert(
+                    isSomeString!(ReturnType!ty),
+                    "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw " ~ FormatName ~ ": getter needs to return a string-like type"
+                );
+            } else {
+                static assert(
+                    isSomeString!ty,
+                    "Cannot use member `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` for raw " ~ FormatName ~ ": is not of string-like type"
+                );
+            }
+
+            enum GenericSerializeValueCode = "buff.putRaw(" ~ getRawValCode ~ ");";
+        } else {
+            enum GenericSerializeValueCode = "this.serialize(buff, " ~ getRawValCode ~ ");";
+        }
+    }
+}
