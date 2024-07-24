@@ -190,8 +190,6 @@ public:
 
     /// Consumes a whole JSON string
     /// 
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
-    /// 
     /// Returns: the content of the JSON string; escape characters are resolved
     string consumeString() {
         this.consumeChar('"');
@@ -248,8 +246,6 @@ public:
 
     /// Consumes a JSON boolean
     /// 
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
-    /// 
     /// Returns: true if a "true" was consumed, false if a "false" was consumed.
     /// 
     /// Throws: JsonParseException if neither a "true" nor a "false" can be consumed.
@@ -267,8 +263,6 @@ public:
     }
 
     /// Consumes an JSON integer
-    /// 
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
     /// 
     /// Returns: a int of type T
     T consumeInt(T)() {
@@ -296,8 +290,6 @@ public:
     }
 
     /// Consumes a JSON number raw
-    /// 
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
     /// 
     /// Returns: the raw number string of a JSON number
     string consumeNumberRaw() {
@@ -360,8 +352,6 @@ public:
     }
 
     /// Consumes raw JSON
-    /// 
-    /// Note: Cannot consume accross boundries of the internal buffer and new data of the source.
     /// 
     /// Returns: a string with raw JSON
     string consumeRawJson() {
