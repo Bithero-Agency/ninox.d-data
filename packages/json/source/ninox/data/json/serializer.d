@@ -431,43 +431,6 @@ private bool isWhitespace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-private template SetterFromOverloads(overloads...)
-{
-    import std.meta, std.traits;
-    alias setter = AliasSeq!();
-    static foreach (overload; overloads) {
-        static if (is(ReturnType!overload == void) && Parameters!overload.length == 1) {
-            setter = AliasSeq!(setter, overload);
-        }
-    }
-    static assert(setter.length == 1, "Could not find setter from overload set");
-    alias SetterFromOverloads = setter[0];
-}
-
-private template GetterFromOverloads(overloads...)
-{
-    import std.meta, std.traits;
-    alias getter = AliasSeq!();
-    static foreach (overload; overloads) {
-        static if (!is(ReturnType!overload == void) && Parameters!overload.length == 0) {
-            getter = AliasSeq!(getter, overload);
-        }
-    }
-    static assert(getter.length == 1, "Could not find getter from overload set");
-    alias GetterFromOverloads = getter[0];
-}
-
-private template GetTypeForDeserialization(alias Elem)
-{
-    import std.traits;
-    static if (isCallable!Elem) {
-        alias GetTypeForDeserialization = Parameters!Elem;
-    }
-    else {
-        alias GetTypeForDeserialization = typeof(Elem);
-    }
-}
-
 import ninox.data.traits;
 alias KeyFromJsonProperty = KeyFromCustomProperty!(JsonProperty);
 alias KeyFromJsonPropertyOverloads = KeyFromCustomPropertyOverloads!(JsonProperty);

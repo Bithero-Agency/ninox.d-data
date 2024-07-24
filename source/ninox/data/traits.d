@@ -27,6 +27,43 @@ module ninox.data.traits;
 
 package(ninox.data):
 
+template SetterFromOverloads(overloads...)
+{
+    import std.meta, std.traits;
+    alias setter = AliasSeq!();
+    static foreach (overload; overloads) {
+        static if (is(ReturnType!overload == void) && Parameters!overload.length == 1) {
+            setter = AliasSeq!(setter, overload);
+        }
+    }
+    static assert(setter.length == 1, "Could not find setter from overload set");
+    alias SetterFromOverloads = setter[0];
+}
+
+template GetterFromOverloads(overloads...)
+{
+    import std.meta, std.traits;
+    alias getter = AliasSeq!();
+    static foreach (overload; overloads) {
+        static if (!is(ReturnType!overload == void) && Parameters!overload.length == 0) {
+            getter = AliasSeq!(getter, overload);
+        }
+    }
+    static assert(getter.length == 1, "Could not find getter from overload set");
+    alias GetterFromOverloads = getter[0];
+}
+
+template GetTypeForDeserialization(alias Elem)
+{
+    import std.traits;
+    static if (isCallable!Elem) {
+        alias GetTypeForDeserialization = Parameters!Elem;
+    }
+    else {
+        alias GetTypeForDeserialization = typeof(Elem);
+    }
+}
+
 template KeyFromCustomProperty(CustomPropertyTy) {
     template KeyFromCustomProperty(alias T, string name, alias E) {
         import std.traits;
