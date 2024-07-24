@@ -49,3 +49,35 @@ template KeyFromCustomProperty(CustomPropertyTy) {
         }
     }
 }
+
+template KeyFromCustomPropertyOverloads(CustomPropertyTy) {
+    template KeyFromCustomPropertyOverloads(alias T, string name, overloads...)
+    {
+        import std.meta, std.traits;
+        template Inner(size_t i = 0) {
+            static if (i >= overloads.length) {
+                alias Inner = AliasSeq!();
+            } else {
+                alias overload = overloads[i];
+                alias udas = getUDAs!(overload, CustomPropertyTy);
+                static if (udas.length > 0) {
+                    static assert(udas.length == 1, "Property `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @" ~ CustomPropertyTy.stringof);
+                    static if (!is(udas[0] == CustomPropertyTy) && udas[0].name != "") {
+                        alias Inner = AliasSeq!(udas[0].name, Inner!(i+1));
+                    } else {
+                        alias Inner = Inner!(i+1);
+                    }
+                } else {
+                    alias Inner = Inner!(i+1);
+                }
+            }
+        }
+        alias Keys = Inner!(0);
+        static assert(Keys.length <= 1, "Property overload set `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @" ~ CustomPropertyTy.stringof);
+        static if (Keys.length < 1) {
+            enum KeyFromCustomPropertyOverloads = name;
+        } else {
+            enum KeyFromCustomPropertyOverloads = Keys[0];
+        }
+    }
+}

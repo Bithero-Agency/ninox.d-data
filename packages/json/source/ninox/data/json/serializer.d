@@ -470,36 +470,7 @@ private template GetTypeForDeserialization(alias Elem)
 
 import ninox.data.traits;
 alias KeyFromJsonProperty = KeyFromCustomProperty!(JsonProperty);
-
-private template KeyFromJsonPropertyOverloads(alias T, string name, overloads...)
-{
-    import std.meta, std.traits;
-    template Inner(size_t i = 0) {
-        static if (i >= overloads.length) {
-            alias Inner = AliasSeq!();
-        } else {
-            alias overload = overloads[i];
-            alias udas = getUDAs!(overload, JsonProperty);
-            static if (udas.length > 0) {
-                static assert(udas.length == 1, "Property `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
-                static if (!is(udas[0] == JsonProperty) && udas[0].name != "") {
-                    alias Inner = AliasSeq!(udas[0].name, Inner!(i+1));
-                } else {
-                    alias Inner = Inner!(i+1);
-                }
-            } else {
-                alias Inner = Inner!(i+1);
-            }
-        }
-    }
-    alias Keys = Inner!(0);
-    static assert(Keys.length <= 1, "Property overload set `" ~ fullyQualifiedName!T ~ "." ~ name ~ "` can only have one @JsonProperty");
-    static if (Keys.length < 1) {
-        enum KeyFromJsonPropertyOverloads = name;
-    } else {
-        enum KeyFromJsonPropertyOverloads = Keys[0];
-    }
-}
+alias KeyFromJsonPropertyOverloads = KeyFromCustomPropertyOverloads!(JsonProperty);
 
 private template SerializeValueCode(alias T, alias Elem, string getElemCode, string getRawValCode, string name)
 {
