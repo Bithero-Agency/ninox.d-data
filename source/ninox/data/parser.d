@@ -30,9 +30,11 @@ import std.ascii : isWhite;
 
 abstract class DeserializerParser {
 protected:
+    enum BufferSize = 4069 * 4;
+
     Callable!(size_t, char[], size_t) source;
     size_t len, pos;
-    char[4069 * 4] data = void;
+    char[BufferSize] data = void;
 
 public:
     this(size_t function(char[], size_t) source) {
@@ -44,7 +46,7 @@ public:
 
     /// Fills up the internal buffer
     void fill() {
-        this.len = this.source(this.data, 4069 * 4);
+        this.len = this.source(this.data, BufferSize);
         if (this.len < 1) {
             throw this.buildParseException("End of file reached");
         }
