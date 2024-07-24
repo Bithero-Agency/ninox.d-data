@@ -26,6 +26,7 @@
 module ninox.data.json.serializer;
 
 import ninox.data.buffer;
+import ninox.data.custom_serializer;
 import ninox.data.json.attributes;
 
 import ninox.std.callable;
@@ -92,28 +93,7 @@ public:
 /// Params:
 ///   buff = the buffer to write to
 ///   value = the value to serialize
-private void callCustomSerializer(alias uda, V)(JsonBuffer buff, auto ref V value) {
-    import std.traits;
-
-    alias SerializerTy = TemplateArgsOf!(uda)[0];
-    alias Args = TemplateArgsOf!(uda)[1 .. $];
-
-    static if (is(SerializerTy == struct)) {
-        enum Serializer = SerializerTy(Args);
-        Serializer.serializeJson(buff, value);
-    }
-    else static if (is(SerializerTy == class)) {
-        auto Serializer = new SerializerTy(Args);
-        Serializer.serializeJson(buff, value);
-    }
-    else static if (isCallable!SerializerTy) {
-        SerializerTy(buff, value, Args);
-    }
-    else {
-        // last resort: just guess its a generic function...
-        SerializerTy!(V)(buff, value, Args);
-    }
-}
+alias callCustomSerializer = mkCallCustomSerializer!(JsonBuffer, "Json");
 
 /// Internal: calls a custom deserializer based on the @JsonDeserialize uda given
 /// 
