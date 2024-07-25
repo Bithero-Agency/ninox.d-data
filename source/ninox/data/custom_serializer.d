@@ -127,6 +127,12 @@ protected:
 
 public:
 
+    /** 
+     * Adds a new runtime serializer to the mapper to be used for (de-)serialization of `T`.
+     * 
+     * Params:
+     *   serializer = The runtime serializer to use.
+     */
     pragma(inline)
     void withSerializer(T)(RtSerializer serializer)
         if (is(T == struct) || is(T == class))
@@ -164,6 +170,11 @@ public:
         }
     }
 
+    /** 
+     * Checks if there is an runtime serializer present for `T`.
+     * 
+     * Returns: `true` if there is a serializer present; `false` otherwise.
+     */
     bool hasSerializer(T)() {
         return (fullyQualifiedName!T in rtSerializers) !is null;
     }
