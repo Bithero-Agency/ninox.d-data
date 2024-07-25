@@ -399,26 +399,126 @@ alias JsonRuntimeSerializer = RuntimeSerializer!(JsonBuffer, JsonParser, "Json")
 class JsonMapper : BaseMapper!(JsonBuffer, JsonParser, "Json") {
 public:
 
-    /// Serializes any value into a string containg JSON
-    /// 
-    /// Params:
-    ///   value = the value to serialize
-    /// 
-    /// Returns: a string containing the serialized value in JSON
-    string serialize(T)(auto ref T value) {
-        import std.array: appender;
-        import std.range.primitives: put;
+    template JsonHandler() {
+        alias IgnoreTypeAttr = JsonIgnoreType;
+        alias SerializeAttr = JsonSerialize;
+        alias SubTypesAttr = JsonSubTypes;
+        alias TypeInfoAttr = JsonTypeInfo;
 
-        auto app = appender!(char[]);
-        auto sink = (const(char)[] chars) => put(app, chars);
-        auto buff = new JsonBuffer(sink, this);
+        alias Buffer = JsonBuffer;
+        enum Format = "Json";
 
-        this.serialize(buff, value);
+        enum PutTypeInfo(alias arg) = `buff.putString("` ~ arg ~ `");`;
 
-        buff.flush();
+        enum PutNullRef = `buff.putRaw("null");`;
+        enum PutTuple = `
+            buff.put('{');
+            static foreach (i, fieldName; value.fieldNames) {
+                static if (i != 0) { buff.put(','); }
+                static if (fieldName == "") {
+                    buff.putKey(to!string(i));
+                    this.serialize(buff, mixin("value[" ~ to!string(i) ~ "]"));
+                }
+                else {
+                    buff.putKey(fieldName);
+                    this.serialize(buff, mixin("value." ~ fieldName));
+                }
+            }
+            buff.put('}');
+        `;
 
-        return cast(string) app.data;
+        enum PutObject = `
+            buff.put('{');
+            this.serializeInnerObject!T(buff, value);
+            buff.put('}');
+        `;
+
+        template PutObjectWithTypeInfo(alias type_info_uda, string TypeInfoCode, string SubTypeCode)
+        {
+            static if (type_info_uda.include == JsonTypeInfo.As.WRAPPER_OBJECT) {
+                enum PutObjectWithTypeInfo = `
+                    buff.put('{');
+                    buff.putKey("name");
+                    ` ~ TypeInfoCode ~ `
+                    buff.put(',');
+                    buff.putKey("value");
+                    buff.put('{');
+                    ` ~ SubTypeCode ~ `
+                    buff.put('}');
+                    buff.put('}');
+                `;
+            }
+            else static if (type_info_uda.include == JsonTypeInfo.As.WRAPPER_ARRAY) {
+                enum PutObjectWithTypeInfo = `
+                    buff.put('[');
+                    ` ~ TypeInfoCode ~ `
+                    buff.put(',');
+                    buff.put('{');
+                    ` ~ SubTypeCode ~ `
+                    buff.put('}');
+                    buff.put(']');
+                `;
+            }
+            else static if (type_info_uda.include == JsonTypeInfo.As.PROPERTY) {
+                enum PutObjectWithTypeInfo = `
+                    buff.put('{');
+                    buff.putKey(type_info_uda[0].property);
+                    ` ~ TypeInfoCode ~ `
+                    buff.put(',');
+                    ` ~ SubTypeCode ~ `
+                    buff.put('}');
+                `;
+            }
+        }
+
+        enum PutString = `buff.putString(to!string(value));`;
+
+        enum PutArray = `
+            buff.put('[');
+            foreach (i, val; value) {
+                if (i != 0) { buff.put(','); }
+                this.serialize(buff, val);
+            }
+            buff.put(']');
+        `;
+
+        enum PutAssociativeArray = `
+            static if (isSomeString!(KeyType!T)) {
+                buff.put('{');
+                size_t i = 0;
+                foreach (key, val; value) {
+                    if (i != 0) { buff.put(','); }
+                    this.serialize(buff, key);
+                    buff.put(':');
+                    this.serialize(buff, val);
+                    i++;
+                }
+                buff.put('}');
+            } else {
+                buff.put('[');
+                size_t i = 0;
+                foreach (key, val; value) {
+                    if (i != 0) { buff.put(','); }
+                    buff.put('[');
+                    this.serialize(buff, key);
+                    buff.put(',');
+                    this.serialize(buff, val);
+                    buff.put(']');
+                    i++;
+                }
+                buff.put(']');
+            }
+        `;
+
+        enum PutEnum = `
+            // TODO: make this configurable somehow...
+            buff.putString(to!string(value));
+        `;
+
+        enum PutBasic = `buff.putRaw(to!string(value));`;
     }
+
+    mixin GenericSerialize!(JsonHandler);
 
     private void serializeInnerObject(T)(JsonBuffer buff, auto ref T value)
     if (is(T == class) || is(T == struct)) {
@@ -620,216 +720,6 @@ public:
             }
         }
         mixin(GetterImpl!());
-    }
-
-    /// Serializes any value into the given buffer
-    /// 
-    /// Params:
-    ///   buff = the buffer to serialize into
-    ///   value = the value to serialize
-    void serialize(T)(JsonBuffer buff, auto ref T value) {
-        import std.traits;
-        import std.meta : AliasSeq, Filter;
-        import std.conv : to;
-        import std.typecons : Nullable, Tuple;
-
-        static if (hasUDA!(T, JsonIgnoreType)) {
-            throw new RuntimeException("Cannot serialize a value of type `" ~ fullyQualifiedName!T ~ "`: is annotated with @JsonIgnoreType");
-        }
-        else static if (hasUDA!(T, JsonSerialize)) {
-            alias udas = getUDAs!(T, JsonSerialize);
-            static assert (udas.length == 1, "Cannot serialize type `" ~ fullyQualifiedName!T ~ "`: got more than one @JsonSerialize attributes");
-
-            static if (isInstanceOf!(JsonSerialize, udas[0])) {
-                alias uda = udas[0];
-            } else {
-                alias uda = typeof(udas[0]);
-            }
-
-            callCustomSerializer!(uda)(buff, value);
-        }
-        else static if (isInstanceOf!(Nullable, T)) {
-            if (value.isNull) {
-                buff.putRaw("null");
-            } else {
-                this.serialize(buff, value.get);
-            }
-        }
-        else static if (isInstanceOf!(Tuple, T)) {
-            buff.put('{');
-            static foreach (i, fieldName; value.fieldNames) {
-                static if (i != 0) { buff.put(','); }
-                static if (fieldName == "") {
-                    buff.putKey(to!string(i));
-                    this.serialize(buff, mixin("value[" ~ to!string(i) ~ "]"));
-                }
-                else {
-                    buff.putKey(fieldName);
-                    this.serialize(buff, mixin("value." ~ fieldName));
-                }
-            }
-            buff.put('}');
-        }
-        else static if (is(T == class) || is(T == struct)) {
-            enum fullName = fullyQualifiedName!T;
-            if (auto dumper = fullName in rtSerializers) {
-                auto v = Variant(value);
-                dumper.serializeJson(buff, fullName, v);
-                return;
-            }
-
-            static if (is(T == class)) {
-                if (value is null) {
-                    buff.putRaw("null");
-                    return;
-                }
-            }
-
-            T instanceof(T)(Object o) if (is(T == class)) {
-                return cast(T) o;
-            }
-
-            alias subtypes_udas = getUDAs!(T, JsonSubTypes);
-            template SerializeTypeInfo(alias uda) {
-                static if (uda.use == JsonTypeInfo.Id.CLASS) {
-                    enum SerializeTypeInfo = "buff.putString(\"" ~ fullyQualifiedName!T ~ "\")";
-                }
-                else static if (uda.use == JsonTypeInfo.Id.NAME) {
-                    static if (subtypes_udas.length == 0) {
-                        static assert(0, "Need @JsonSubTypes for `" ~ fullyQualifiedName!T ~ "`");
-                    }
-                    else static if (subtypes_udas.length > 1) {
-                        static assert(0, "To many @JsonSubTypes for `" ~ fullyQualifiedName!T ~ "`");
-                    }
-                    else {
-                        template GenSubTypeSwitching(size_t i = 0) {
-                            static if (i >= subtypes_udas[0].subtypes.length) {
-                                enum GenSubTypeSwitching = "";
-                            }
-                            else {
-                                enum Rest = GenSubTypeSwitching!(i+1);
-                                enum Type = "imported!\"" ~ subtypes_udas[0].subtypes[i].mod ~ "\"." ~ subtypes_udas[0].subtypes[i].type;
-                                enum Code = "if (instanceof!(" ~ Type ~ ")(value)) { buff.putString(\"" ~ subtypes_udas[0].subtypes[i].name ~ "\"); }";
-                                static if (Rest == "") {
-                                    enum GenSubTypeSwitching = Code;
-                                } else {
-                                    enum GenSubTypeSwitching = Code ~ " else " ~ Rest;
-                                }
-                            }
-                        }
-
-                        enum SerializeTypeInfo =
-                            GenSubTypeSwitching!()
-                            ~ "else { assert(0, \"Could not determine logical name / subtype of `" ~ fullyQualifiedName!T ~ "`\"); }";
-                    }
-                }
-            }
-
-            alias type_info_uda = getUDAs!(T, JsonTypeInfo);
-            static if (type_info_uda.length == 1) {
-                template GenSubTypeSerialization(size_t i = 0) {
-                    static if (i >= subtypes_udas[0].subtypes.length) {
-                        enum GenSubTypeSerialization = "";
-                    }
-                    else {
-                        enum Rest = GenSubTypeSerialization!(i+1);
-                        enum Type = "imported!\"" ~ subtypes_udas[0].subtypes[i].mod ~ "\"." ~ subtypes_udas[0].subtypes[i].type;
-                        enum Code = "if (auto v = instanceof!(" ~ Type ~ ")(value)) { this.serializeInnerObject(buff, v); }";
-                        static if (Rest == "") {
-                            enum GenSubTypeSerialization = Code;
-                        } else {
-                            enum GenSubTypeSerialization = Code ~ " else " ~ Rest;
-                        }
-                    }
-                }
-
-                static if (type_info_uda[0].include == JsonTypeInfo.As.WRAPPER_OBJECT) {
-                    buff.put('{');
-                    buff.putKey("name");
-                    mixin(SerializeTypeInfo!(type_info_uda[0]));
-                    buff.put(',');
-                    buff.putKey("value");
-                    buff.put('{');
-                    mixin(GenSubTypeSerialization!());
-                    buff.put('}');
-                    buff.put('}');
-                }
-                else static if (type_info_uda[0].include == JsonTypeInfo.As.WRAPPER_ARRAY) {
-                    buff.put('[');
-                    mixin(SerializeTypeInfo!(type_info_uda[0]));
-                    buff.put(',');
-                    buff.put('{');
-                    mixin(GenSubTypeSerialization!());
-                    buff.put('}');
-                    buff.put(']');
-                }
-                else static if (type_info_uda[0].include == JsonTypeInfo.As.PROPERTY) {
-                    buff.put('{');
-                    buff.putKey(type_info_uda[0].property);
-                    mixin(SerializeTypeInfo!(type_info_uda[0]));
-                    buff.put(',');
-                    mixin(GenSubTypeSerialization!());
-                    buff.put('}');
-                }
-            }
-            else static if (type_info_uda.length > 1) {
-                static assert(0, "Cannot have more than one @JsonTypeInfo attribute on `" ~ fullyQualifiedName!T ~ "`");
-            }
-            else {
-                buff.put('{');
-                this.serializeInnerObject!T(buff, value);
-                buff.put('}');
-            }
-        }
-        else static if (isSomeString!T) {
-            buff.putString(to!string(value));
-        }
-        else static if (isArray!T) {
-            buff.put('[');
-            foreach (i, val; value) {
-                if (i != 0) { buff.put(','); }
-                this.serialize(buff, val);
-            }
-            buff.put(']');
-        }
-        else static if (isAssociativeArray!T) {
-            static if (isSomeString!(KeyType!T)) {
-                buff.put('{');
-                size_t i = 0;
-                foreach (key, val; value) {
-                    if (i != 0) { buff.put(','); }
-                    this.serialize(buff, key);
-                    buff.put(':');
-                    this.serialize(buff, val);
-                    i++;
-                }
-                buff.put('}');
-            } else {
-                buff.put('[');
-                size_t i = 0;
-                foreach (key, val; value) {
-                    if (i != 0) { buff.put(','); }
-                    buff.put('[');
-                    this.serialize(buff, key);
-                    buff.put(',');
-                    this.serialize(buff, val);
-                    buff.put(']');
-                    i++;
-                }
-                buff.put(']');
-            }
-        }
-        else static if (is(T == enum)) {
-            // TODO: make this configurable somehow...
-            buff.putString(to!string(value));
-        }
-        else static if (isBasicType!T) {
-            // TODO: check if this is ok
-            buff.putRaw(to!string(value));
-        }
-        else {
-            static assert(0, "Cannot serialize: " ~ fullyQualifiedName!T);
-        }
     }
 
     /// Deserializes a string into the requested type

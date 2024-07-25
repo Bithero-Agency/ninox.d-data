@@ -180,3 +180,161 @@ public:
     }
 
 }
+
+template SerializeTypeInfo(alias T, alias TypeInfoAttr, alias PutTypeInfo, alias uda, subtypes_udas...)
+{
+    import std.traits;
+    static if (uda.use == TypeInfoAttr.Id.CLASS) {
+        enum SerializeTypeInfo = PutTypeInfo!(fullyQualifiedName!T);
+    }
+    else static if (uda.use == TypeInfoAttr.Id.NAME) {
+        static if (subtypes_udas.length == 0) {
+            static assert(0, "Need @" ~ __traits(identifier, TypeInfoAttr) ~ " for `" ~ fullyQualifiedName!T ~ "`");
+        }
+        else static if (subtypes_udas.length > 1) {
+            static assert(0, "To many @" ~ __traits(identifier, TypeInfoAttr) ~ " for `" ~ fullyQualifiedName!T ~ "`");
+        }
+        else {
+            template GenSubTypeSwitching(size_t i = 0) {
+                static if (i >= subtypes_udas[0].subtypes.length) {
+                    enum GenSubTypeSwitching = "";
+                }
+                else {
+                    enum Rest = GenSubTypeSwitching!(i+1);
+                    enum Type = "imported!\"" ~ subtypes_udas[0].subtypes[i].mod ~ "\"." ~ subtypes_udas[0].subtypes[i].type;
+                    enum Code = "if (cast(" ~ Type ~ ") value) { " ~ PutTypeInfo!(subtypes_udas[0].subtypes[i].name) ~ " }";
+                    static if (Rest == "") {
+                        enum GenSubTypeSwitching = Code;
+                    } else {
+                        enum GenSubTypeSwitching = Code ~ " else " ~ Rest;
+                    }
+                }
+            }
+
+            enum SerializeTypeInfo =
+                GenSubTypeSwitching!()
+                ~ "else { assert(0, \"Could not determine logical name / subtype of `" ~ fullyQualifiedName!T ~ "`\"); }";
+        }
+    }
+}
+
+template GenericSerialize(alias Handler)
+{
+    string serialize(T)(auto ref T value) {
+        import std.array: appender;
+        import std.range.primitives: put;
+
+        auto app = appender!(char[]);
+        auto sink = (const(char)[] chars) => put(app, chars);
+        auto buff = new Handler!().Buffer(sink, this);
+
+        this.serialize(buff, value);
+
+        buff.flush();
+
+        return cast(string) app.data;
+    }
+
+    void serialize(T)(Handler!().Buffer buff, auto ref T value) {
+        import std.traits;
+        import std.meta : AliasSeq, Filter;
+        import std.conv : to;
+        import std.typecons : Nullable, Tuple;
+
+        static if (hasUDA!(T, Handler!().IgnoreTypeAttr)) {
+            throw new RuntimeException("Cannot serialize a value of type `" ~ fullyQualifiedName!T ~ "`: is annotated with @" ~ __traits(identifier, Handler!().IgnoreTypeAttr));
+        }
+        else static if (hasUDA!(T, Handler!().SerializeAttr)) {
+            alias udas = getUDAs!(T, Handler!().SerializeAttr);
+            static assert (udas.length == 1, "Cannot serialize type `" ~ fullyQualifiedName!T ~ "`: got more than one @" ~ __traits(identifier, Handler!().SerializeAttr) ~ " attributes");
+
+            static if (isInstanceOf!(Handler!().SerializeAttr, udas[0])) {
+                alias uda = udas[0];
+            } else {
+                alias uda = typeof(udas[0]);
+            }
+
+            callCustomSerializer!(uda)(buff, value);
+        }
+        else static if (isInstanceOf!(Nullable, T)) {
+            if (value.isNull) {
+                mixin(Handler!().PutNullRef);
+            } else {
+                this.serialize(buff, value.get);
+            }
+        }
+        else static if (isInstanceOf!(Tuple, T)) {
+            mixin(Handler!().PutTuple);
+        }
+        else static if (is(T == class) || is(T == struct)) {
+            enum fullName = fullyQualifiedName!T;
+            if (auto dumper = fullName in rtSerializers) {
+                auto v = Variant(value);
+                mixin("dumper.serialize" ~ Handler!().Format ~ "(buff, fullName, v);");
+                return;
+            }
+
+            static if (is(T == class)) {
+                if (value is null) {
+                    mixin(Handler!().PutNullRef);
+                    return;
+                }
+            }
+
+            alias subtypes_udas = getUDAs!(T, Handler!().SubTypesAttr);
+            alias type_info_uda = getUDAs!(T, Handler!().TypeInfoAttr);
+            static if (type_info_uda.length == 1) {
+                template GenSubTypeSerialization(size_t i = 0) {
+                    static if (i >= subtypes_udas[0].subtypes.length) {
+                        enum GenSubTypeSerialization = "";
+                    }
+                    else {
+                        enum Rest = GenSubTypeSerialization!(i+1);
+                        enum Type = "imported!\"" ~ subtypes_udas[0].subtypes[i].mod ~ "\"." ~ subtypes_udas[0].subtypes[i].type;
+                        enum Code = "if (auto v = cast(" ~ Type ~ ") value) { this.serializeInnerObject(buff, v); }";
+                        static if (Rest == "") {
+                            enum GenSubTypeSerialization = Code;
+                        } else {
+                            enum GenSubTypeSerialization = Code ~ " else " ~ Rest;
+                        }
+                    }
+                }
+
+                mixin(Handler!().PutObjectWithTypeInfo!(
+                    type_info_uda[0],
+                    SerializeTypeInfo!(
+                        T,
+                        Handler!().TypeInfoAttr,
+                        Handler!().PutTypeInfo,
+                        type_info_uda[0], subtypes_udas
+                    ),
+                    GenSubTypeSerialization!()
+                ));
+            }
+            else static if (type_info_uda.length > 1) {
+                static assert(0, "Cannot have more than one @" ~ __traits(identifier, Handler!().TypeInfoAttr!()) ~ " attribute on `" ~ fullyQualifiedName!T ~ "`");
+            }
+            else {
+                mixin(Handler!().PutObject);
+            }
+        }
+        else static if (isSomeString!T) {
+            mixin(Handler!().PutString);
+        }
+        else static if (isArray!T) {
+            mixin(Handler!().PutArray);
+        }
+        else static if (isAssociativeArray!T) {
+            mixin(Handler!().PutAssociativeArray);
+        }
+        else static if (is(T == enum)) {
+            mixin(Handler!().PutEnum);
+        }
+        else static if (isBasicType!T) {
+            mixin(Handler!().PutBasic);
+        }
+        else {
+            static assert(0, "Cannot serialize: " ~ fullyQualifiedName!T);
+        }
+    }
+}
