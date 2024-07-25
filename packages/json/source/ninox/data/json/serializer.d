@@ -524,51 +524,39 @@ public:
     if (is(T == class) || is(T == struct)) {
         import std.traits;
         import std.meta : AliasSeq, Filter;
+        import ninox.std.traits;
+        import std.string : join;
 
         alias field_names = FieldNameTuple!T;
         alias field_types = FieldTypeTuple!T;
 
-        template FieldImpl(size_t i = 0) {
-            static if (i >= field_names.length) {
-                enum FieldImpl = "";
-            } else static if (hasUDA!(T.tupleof[i], JsonIgnore)) {
-                enum FieldImpl = FieldImpl!(i+1);
-            } else static if (hasUDA!(field_types[i], JsonIgnoreType)) {
-                enum FieldImpl = FieldImpl!(i+1);
-            } else static if (!__traits(compiles, mixin("T." ~ field_names[i]))) {
-                enum FieldImpl = FieldImpl!(i+1);
+        template FieldImpl(size_t i, alias Field)
+        {
+            static if (i > 0) {
+                enum Sep = "buff.put(',');";
             } else {
-                static if (i > 0) {
-                    enum Sep = "buff.put(',');";
-                } else {
-                    enum Sep = "";
-                }
-
-                alias name = field_names[i];
-                enum Key = KeyFromJsonProperty!(T, name, T.tupleof[i]);
-
-                enum Val = SerializeValueCode!(
-                    T, __traits(getMember, T, name), "alias Elem = __traits(getMember, T, \"" ~ name ~ "\");", "value." ~ name, name
-                );
-
-                enum FieldImpl = Sep ~ "buff.putKey(\"" ~ Key ~ "\");" ~ Val ~ FieldImpl!(i+1);
+                enum Sep = "";
             }
+            enum Key = KeyFromJsonProperty!(T, Field.name, Field.member);
+            enum Val = SerializeValueCode!(
+                T, Field.member,
+                "alias Elem = __traits(getMember, T, \"" ~ Field.name ~ "\");",
+                "value." ~ Field.name,
+                Field.name
+            );
+            enum FieldImpl = Sep ~ `buff.putKey("` ~ Key ~ `");` ~ Val;
         }
-        mixin(FieldImpl!());
 
-        template CountFields(size_t i = 0) {
-            static if (i >= field_names.length) {
-                enum CountFields = 0;
-            } else static if (hasUDA!(T.tupleof[i], JsonIgnore)) {
-                enum CountFields = CountFields!(i+1);
-            } else static if (hasUDA!(field_types[i], JsonIgnoreType)) {
-                enum CountFields = CountFields!(i+1);
-            } else static if (!__traits(compiles, mixin("T." ~ field_names[i]))) {
-                enum CountFields = CountFields!(i+1);
-            } else {
-                enum CountFields = 1 + CountFields!(i+1);
-            }
-        }
+        enum FieldIsOfInterest(alias Field) = (
+            !Field.has_UDA!JsonIgnore
+            && !hasUDA!(Field.type, JsonIgnoreType)
+            && Field.compiles
+        );
+
+        alias fields = Filter!(FieldIsOfInterest, GetFields!T);
+
+        enum FieldCode = [ AliasSeq!( "", staticMapWithIndex!(FieldImpl, fields) ) ].join("\n");
+        mixin(FieldCode);
 
         alias allMembers = __traits(allMembers, T);
 
@@ -599,7 +587,7 @@ public:
             }
         }
 
-        static if (CountFields!() > 0 && CountGetter!() > 0) {
+        static if (fields.length && CountGetter!() > 0) {
             buff.put(',');
         }
 
