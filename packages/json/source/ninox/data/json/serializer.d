@@ -527,9 +527,6 @@ public:
         import ninox.std.traits;
         import std.string : join;
 
-        alias field_names = FieldNameTuple!T;
-        alias field_types = FieldTypeTuple!T;
-
         template FieldImpl(size_t i, alias Field)
         {
             static if (i > 0) {
@@ -557,8 +554,6 @@ public:
 
         enum FieldCode = [ AliasSeq!( "", staticMapWithIndex!(FieldImpl, fields) ) ].join("\n");
         mixin(FieldCode);
-
-        alias allMembers = __traits(allMembers, T);
 
         enum MemberIsGetter(alias Member) = (
             Member.compiles
