@@ -560,154 +560,129 @@ public:
 
         alias allMembers = __traits(allMembers, T);
 
-        template CountGetter(size_t i = 0) {
-            static if (i >= allMembers.length) {
-                enum CountGetter = 0;
-            }
-            else {
-                enum name = allMembers[i];
-                static if (__traits(compiles, mixin("T." ~ name))) {
-                    mixin ("alias member = T." ~ name ~ ";");
-                    static if (is(typeof(member) == function)) {
-                        static if (hasUDA!(member, JsonGetter) || hasUDA!(member, JsonAnyGetter)) {
-                            enum CountGetter = 1 + CountGetter!(i+1);
-                        } else {
-                            enum CountGetter = CountGetter!(i+1);
-                        }
-                    }
-                    else static if (isCallable!member && hasFunctionAttributes!(member, "@property")) {
-                        enum CountGetter = 1 + CountGetter!(i+1);
-                    }
-                    else {
-                        enum CountGetter = CountGetter!(i+1);
-                    }
-                } else {
-                    enum CountGetter = CountGetter!(i+1);
-                }
-            }
-        }
+        enum MemberIsGetter(alias Member) = (
+            Member.compiles
+            && (
+                (is(Member.type == function) && (Member.has_UDA!JsonGetter || Member.has_UDA!JsonAnyGetter))
+                || (isCallable!(Member.raw) && hasFunctionAttributes!(Member.raw, "@property"))
+            )
+        );
 
-        static if (fields.length && CountGetter!() > 0) {
+        alias getters = Filter!(MemberIsGetter, GetDerivedMembers!T);
+
+        static if (fields.length > 0 && getters.length > 0) {
             buff.put(',');
         }
 
-        template GetterImpl(size_t i = 0, size_t j = 0) {
-            static if (i >= allMembers.length) {
-                enum GetterImpl = "";
+        template GetterImpl(size_t i, alias Member)
+        {
+            static if (i > 0) {
+                enum Sep = "buff.put(',');";
+            } else {
+                enum Sep = "";
             }
-            else {
-                enum name = allMembers[i];
-                static if (__traits(compiles, mixin("T." ~ name))) {
-                    mixin ("alias member = T." ~ name ~ ";");
-                    static if (is(typeof(member) == function)) {
-                        enum isGetter = hasUDA!(member, JsonGetter);
-                        enum isAnyGetter = hasUDA!(member, JsonAnyGetter);
-                        static assert (
-                            !(isGetter && isAnyGetter),
-                            "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Cannot have both @JsonGetter and @JsonAnyGetter"
+
+            static if (is(Member.type == function)) {
+                enum isGetter = Member.has_UDA!JsonGetter;
+                enum isAnyGetter = Member.has_UDA!JsonAnyGetter;
+                static assert (
+                    !(isGetter && isAnyGetter),
+                    "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Cannot have both @JsonGetter and @JsonAnyGetter"
+                );
+                static if (isGetter) {
+                    static assert(
+                        is(ParameterTypeTuple!(Member.raw) == AliasSeq!()),
+                        "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Getter cannot have any parameters"
+                    );
+
+                    alias udas = Member.get_UDAs!JsonGetter;
+                    static assert(
+                        udas.length == 1,
+                        "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Cannot have multiple @JsonGetter"
+                    );
+
+                    alias uda = udas[0];
+                    static if (is(uda == JsonGetter)) {
+                        static assert(
+                            0, "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Need instance of @JsonGetter"
+                        );
+                    } else {
+                        static assert(
+                            uda.name != "",
+                            "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Need name for @JsonGetter"
                         );
 
-                        static if (j > 0) {
-                            enum Sep = "buff.put(',');";
-                        } else {
-                            enum Sep = "";
-                        }
+                        enum Val = SerializeValueCode!(
+                            T, Member.raw,
+                            "alias Elem = __traits(getMember, T, \"" ~ Member.name ~ "\");",
+                            "value." ~ Member.name ~ "()",
+                            Member.name
+                        );
 
-                        static if (isGetter) {
-                            static assert(
-                                is(ParameterTypeTuple!member == AliasSeq!()),
-                                "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Getter cannot have any parameters"
-                            );
-
-                            alias udas = getUDAs!(member, JsonGetter);
-                            static assert(
-                                udas.length == 1,
-                                "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Cannot have multiple @JsonGetter"
-                            );
-
-                            alias uda = udas[0];
-                            static if (is(uda == JsonGetter)) {
-                                static assert(
-                                    0, "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Need instance of @JsonGetter"
-                                );
-                            } else {
-                                static assert(
-                                    uda.name != "",
-                                    "Error in getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Need name for @JsonGetter"
-                                );
-
-                                enum Val = SerializeValueCode!(
-                                    T, member, "alias Elem = __traits(getMember, T, \"" ~ name ~ "\");", "value." ~ name ~ "()", name
-                                );
-
-                                enum GetterImpl = Sep ~ "buff.putKey(\"" ~ uda.name ~ "\");" ~ Val ~ GetterImpl!(i+1, j+1);
-                            }
-                        } else static if (isAnyGetter) {
-                            alias RetT = ReturnType!member;
-                            static if (isAssociativeArray!(RetT) && isSomeString!(KeyType!RetT)) {
-                                static assert(
-                                    is(ParameterTypeTuple!member == AliasSeq!()),
-                                    "Error in any-getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Any-Getter cannot have any parameters"
-                                );
-
-                                enum GetterImpl =
-                                    Sep
-                                    ~ "{"
-                                        ~ "auto map = value." ~ name ~ "();"
-                                        ~ "size_t mi = 0;"
-                                        ~ "foreach (key, val; map) {"
-                                            ~ "if (mi != 0) { buff.put(','); }"
-                                            ~ "this.serialize(buff, key);"
-                                            ~ "buff.put(':');"
-                                            ~ "this.serialize(buff, val);"
-                                            ~ "mi++;"
-                                        ~ "}"
-                                    ~ "}"
-                                    ~ GetterImpl!(i+1, j+1);
-                            } else {
-                                static assert(
-                                    0,
-                                    "Error in any-getter `" ~ fullyQualifiedName!T ~ "." ~ name ~ "`: Wrong return type"
-                                );
-                            }
-                        } else {
-                            enum GetterImpl = GetterImpl!(i+1, j);
-                        }
+                        enum GetterImpl = Sep ~ "buff.putKey(\"" ~ uda.name ~ "\");" ~ Val;
                     }
-                    else static if (isCallable!member && hasFunctionAttributes!(member, "@property")) {
-                        static if (j > 0) {
-                            enum Sep = "buff.put(',');";
-                        } else {
-                            enum Sep = "";
-                        }
-                        alias overloads = __traits(getOverloads, T, name);
-                        alias getter = AliasSeq!();
-                        static foreach (overload; overloads) {
-                            static if (!is(ReturnType!overload == void) && Parameters!overload.length == 0) {
-                                getter = AliasSeq!(getter, overload);
-                            }
-                        }
+                }
+                else static if (isAnyGetter) {
+                    alias RetT = ReturnType!(Member.raw);
+                    static if (isAssociativeArray!(RetT) && isSomeString!(KeyType!RetT)) {
+                        static assert(
+                            is(ParameterTypeTuple!(Member.raw) == AliasSeq!()),
+                            "Error in any-getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Any-Getter cannot have any parameters"
+                        );
 
-                        static if (getter.length < 1) {
-                            enum GetterImpl = GetterImpl!(i+1, j);
-                        } else {
-                            enum Key = KeyFromJsonPropertyOverloads!(T, name, overloads);
-                            enum Val = SerializeValueCode!(
-                                T, getter[0], "alias Elem = GetterFromOverloads!(__traits(getOverloads, T, \"" ~ name ~ "\"));", "value." ~ name, name
-                            );
-                            enum GetterImpl = Sep ~ "buff.putKey(\"" ~ Key ~ "\");" ~ Val ~ GetterImpl!(i+1, j+1);
-                        }
-                    }
-                    else {
-                        enum GetterImpl = GetterImpl!(i+1, j);
+                        enum GetterImpl =
+                            Sep
+                            ~ "{"
+                                ~ "auto map = value." ~ Member.name ~ "();"
+                                ~ "size_t mi = 0;"
+                                ~ "foreach (key, val; map) {"
+                                    ~ "if (mi != 0) { buff.put(','); }"
+                                    ~ "this.serialize(buff, key);"
+                                    ~ "buff.put(':');"
+                                    ~ "this.serialize(buff, val);"
+                                    ~ "mi++;"
+                                ~ "}"
+                            ~ "}";
+                    } else {
+                        static assert(
+                            0,
+                            "Error in any-getter `" ~ fullyQualifiedName!T ~ "." ~ Member.name ~ "`: Wrong return type"
+                        );
                     }
                 }
                 else {
-                    enum GetterImpl = GetterImpl!(i+1, j);
+                    static assert(0);
                 }
             }
+            else static if (isCallable!(Member.raw) && hasFunctionAttributes!(Member.raw, "@property")) {
+                alias overloads = __traits(getOverloads, T, Member.name);
+                alias getter = AliasSeq!();
+                static foreach (overload; overloads) {
+                    static if (!is(ReturnType!overload == void) && Parameters!overload.length == 0) {
+                        getter = AliasSeq!(getter, overload);
+                    }
+                }
+
+                static if (getter.length < 1) {
+                    enum GetterImpl = "";
+                } else {
+                    enum Key = KeyFromJsonPropertyOverloads!(T, Member.name, overloads);
+                    enum Val = SerializeValueCode!(
+                        T, getter[0],
+                        "alias Elem = GetterFromOverloads!(__traits(getOverloads, T, \"" ~ Member.name ~ "\"));",
+                        "value." ~ Member.name,
+                        Member.name
+                    );
+                    enum GetterImpl = Sep ~ "buff.putKey(\"" ~ Key ~ "\");" ~ Val;
+                }
+            }
+            else {
+                static assert(0);
+            }
         }
-        mixin(GetterImpl!());
+
+        enum GetterCode = [ AliasSeq!( "", staticMapWithIndex!(GetterImpl, getters) ) ].join("\n");
+        mixin(GetterCode);
     }
 
     /// Deserializes a string into the requested type
